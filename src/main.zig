@@ -162,7 +162,7 @@ const Markov = struct {
                     return std.mem.lessThan(u8, keys[a_index], keys[b_index]);
                 }
 
-                // We want *descending* order by score, so "lessThan" returns true
+                // We want descending order by score, so `lessThan` returns true
                 // when va > vb.
                 return va > vb;
             }
