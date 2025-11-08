@@ -78,7 +78,7 @@ pub const Markov = struct {
         };
 
         for (file.lines.items) |command| {
-             try markov.updateFromCommand(command);
+            try markov.updateFromCommand(command);
         }
 
         return markov;
@@ -106,7 +106,7 @@ pub const Markov = struct {
 
         // Update the bigram. For each pair in the current command, create the
         // pair or increase it by one if it already exists.
-        for (command.items[0..command.items.len - 1], 1..) |w, next_idx| {
+        for (command.items[0 .. command.items.len - 1], 1..) |w, next_idx| {
             const next_w = command.items[next_idx];
             const pair = Pair{ .fst = w, .snd = next_w };
             const entry = self.bigram.getEntry(pair) orelse {
@@ -127,8 +127,8 @@ pub const Markov = struct {
         self: *const Markov,
         alloc: Allocator,
         buf: [][]const u8,
-        prefix: []const u8,
         prev_word: ?[]const u8,
+        prefix: []const u8,
         bigram_weight: f64,
     ) !usize {
         var candidates = std.StringArrayHashMap(f64).init(alloc);
