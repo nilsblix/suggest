@@ -34,12 +34,12 @@ const Markov = struct {
         fst: []const u8,
         snd: []const u8,
 
-        // From the Zig HashMap docs:
-        // ```
-        // Context must be a struct type with two member functions:
-        //     hash(self, K) u64
-        //     eql(self, K, K) bool
-        // ```
+        /// From the Zig HashMap docs:
+        /// ```
+        /// Context must be a struct type with two member functions:
+        ///     hash(self, K) u64
+        ///     eql(self, K, K) bool
+        /// ```
         const Context = struct {
             pub fn hash(_: Context, pair: Pair) u64 {
                 var hasher = std.hash.Wyhash.init(0);
@@ -56,11 +56,10 @@ const Markov = struct {
         };
     };
 
-    // Count of each word.
-    // unigram: std.AutoHashMap([]const u8, usize),
+    /// Count of each word.
     unigram: std.StringHashMap(usize),
-    // Count of transitions (prev_word -> next_word). This is therefore a
-    // first-order Markov Chain.
+    /// Count of transitions (prev_word -> next_word). This is therefore a
+    /// first-order Markov Chain.
     bigram: std.HashMap(Pair, usize, Pair.Context, std.hash_map.default_max_load_percentage),
 
     pub fn fromLines(alloc: Allocator, lines: Lines) !Markov {
