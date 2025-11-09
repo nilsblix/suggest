@@ -137,15 +137,15 @@ pub fn main() !void {
     const alloc = std.heap.page_allocator;
 
     const params = comptime clap.parseParamsComptime(
-        // FIXME: Make sure that all of these make sense.
         \\-h, --help                    Display this help and exit.
+        \\--zsh                         Output the zsh-script to initialize the keybinds for the program and exit.
+        \\--bash                        Output the bash-script to initialize the keybinds for the program and exit.
+        \\--line <str>                  The current, unfinished command.
+        \\--cursor-idx <usize>          The 0-based cursor index of the current, unfinished command.
         \\-p, --path <str>              The path to the history file, such as ~/.zsh_history or ~/.bash_history.
         \\-w, --max-width <usize>       The maximum amount of suggestions to be outputed.
         \\-h, --max-height <usize>      The maximum amount of suggestions to be outputed.
         \\-b, --bigram-weight <f64>     A multiple of how much the frequency in relation to the previous word should matter compared to the overall frequency of the word.
-        \\--init                        FIXME
-        \\--line <str>                  FIXME
-        \\--cursor-idx <usize>          FIXME
     );
 
     var diag = clap.Diagnostic{};
@@ -162,13 +162,41 @@ pub fn main() !void {
         return clap.helpToFile(.stderr(), clap.Help, &params, .{});
     }
 
-    if (res.args.init != 0) {
+    if (res.args.zsh != 0) {
         var stdout_wrapper = std.fs.File.stdout().writer(&.{});
         var stdout = &stdout_wrapper.interface;
         try stdout.writeAll(shell.ZSH_INIT_SCRIPT);
         return;
     }
 
+    if (res.args.bash != 0) {
+        var stdout_wrapper = std.fs.File.stdout().writer(&.{});
+        var stdout = &stdout_wrapper.interface;
+        try stdout.writeAll(shell.BASH_INIT_SCRIPT);
+        return;
+    }
+
     const config = try Config.init(res.args);
     try config.run(alloc);
 }
+
+// Roadmap:
+//
+// A way to store and update the prediction model.
+//   That way the program doesn't need to read the entire .<shell>_history file
+//   on startup.
+//   Maybe run two threads:
+//     - One for using the model to predict answers. This thread would also be
+//     in charge of rendering.
+//     - One for reading the current ~/.<shell>_history file and updating the
+//     model's parameters in some json file in ~/.local. If the user quits the
+//     program before this was finished updating, then it would simply abandon
+//     the update.
+// Optional configuration file somwhere on the system.
+//   ~/.config/suggest.yml maybe?
+//   This could contain both visual config, Markov bigram-weight and other
+//   stuff. <SHELL>_INIT_SCIPT would simply have
+//   `$ suggest --init-<shell> --path ... --line ... --cursor-idx ...`
+// More suggestion pickers.
+//   - File picker (such as fzf ctrl-t).
+//   - Command picker (such as ctrl-r).
