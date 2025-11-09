@@ -6,7 +6,7 @@ tty_file: std.fs.File,
 
 /// Internal buffers for the /dev/tty reader/writer
 out_buf: [1024]u8 = undefined,
-in_buf:  [1024]u8 = undefined,
+in_buf: [1024]u8 = undefined,
 
 /// Concrete File.Reader/Writer for /dev/tty
 tty_writer: std.fs.File.Writer,
@@ -14,7 +14,7 @@ tty_reader: std.fs.File.Reader,
 
 /// Public interfaces for reading/writing.
 stdout: *std.io.Writer,
-stdin:  *std.io.Reader,
+stdin: *std.io.Reader,
 
 /// Original terminal settings (if raw mode was enabled)
 orig_termios: ?posix.termios = null,
@@ -39,7 +39,7 @@ pub fn init() !Self {
     term.tty_reader = term.tty_file.reader(&term.in_buf);
 
     term.stdout = &term.tty_writer.interface;
-    term.stdin  = &term.tty_reader.interface;
+    term.stdin = &term.tty_reader.interface;
 
     term.orig_termios = null;
 
@@ -127,7 +127,7 @@ pub fn getCursor(self: Self) !Cursor {
 
     // 2. Read until we see "R" or run out of buffer.
     while (got < buf.len) {
-        const n = try self.stdin.readSliceShort(buf[got..got + 1]);
+        const n = try self.stdin.readSliceShort(buf[got .. got + 1]);
         if (n == 0) break; // EOF-ish
         got += n;
         if (buf[got - 1] == 'R') break;

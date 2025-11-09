@@ -18,7 +18,7 @@ const ZSH_INIT_SCRIPT =
     \\
     \\ zle -N suggest-widget
     \\ bindkey '^f' suggest-widget
-    ;
+;
 
 const Config = struct {
     history_file_path: []const u8,
@@ -89,7 +89,7 @@ const Config = struct {
 
         const content = blk: {
             const prev = if (last_two.prev == null) "NULL" else last_two.prev.?;
-            const ret = try std.fmt.allocPrint(alloc, "Parsed: [{s}] [{s}]", .{prev, last_two.curr});
+            const ret = try std.fmt.allocPrint(alloc, "Parsed: [{s}] [{s}]", .{ prev, last_two.curr });
             break :blk ret;
         };
         suggestions[0] = content;
