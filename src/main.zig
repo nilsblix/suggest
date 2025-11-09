@@ -182,6 +182,14 @@ pub fn main() !void {
 
 // Roadmap:
 //
+// Continously suggest new suggestions
+//   Ex: When typing, have the Popup window follow the cursor and sample and
+//   give new suggestions.
+//
+//   This would require a new way of outputting stdout to the command, as
+//   currently the entire new line gets dumped when the process terminates,
+//   which means that outputting and updating the command each time
+//   `.pass_through_byte` activates needs to accommodate a new mechanism.
 // A way to store and update the prediction model.
 //   That way the program doesn't need to read the entire .<shell>_history file
 //   on startup.
