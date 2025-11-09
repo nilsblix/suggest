@@ -69,6 +69,10 @@ fn setBgColor(self: Self, color: Color) !void {
     try self.stdout.print("\x1b[48;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
 }
 
+fn setFgColor(self: Self, color: Color) !void {
+    try self.stdout.print("\x1b[38;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
+}
+
 fn resetSgr(self: Self) !void {
     try self.stdout.writeAll("\x1b[0m");
 }
@@ -174,7 +178,6 @@ pub fn getCursor(self: Self) !Cursor {
 }
 
 pub fn printAt(self: Self, row: usize, col: usize, text: []const u8) !void {
-    // Save and restore cursor so we don't affect surrounding state
     try saveCursor(self);
     errdefer restoreCursor(self) catch {};
 
@@ -186,14 +189,27 @@ pub fn printAt(self: Self, row: usize, col: usize, text: []const u8) !void {
 }
 
 pub fn printAtBg(self: Self, row: usize, col: usize, text: []const u8, bg: Color) !void {
-    // Print text with a specific background color, without changing
-    // surrounding cursor position or lingering attributes.
     try saveCursor(self);
     errdefer restoreCursor(self) catch {};
     errdefer resetSgr(self) catch {};
 
     try goto(self, row, col);
     try setBgColor(self, bg);
+    try self.stdout.writeAll(text);
+    try resetSgr(self);
+
+    try restoreCursor(self);
+    try self.stdout.flush();
+}
+
+pub fn printAtBgFg(self: Self, row: usize, col: usize, text: []const u8, bg: Color, fg: Color) !void {
+    try saveCursor(self);
+    errdefer restoreCursor(self) catch {};
+    errdefer resetSgr(self) catch {};
+
+    try goto(self, row, col);
+    try setBgColor(self, bg);
+    try setFgColor(self, fg);
     try self.stdout.writeAll(text);
     try resetSgr(self);
 

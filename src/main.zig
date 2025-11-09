@@ -64,10 +64,20 @@ const Config = struct {
 
         var popup = try Popup.init(alloc, .{
             .max_width = self.max_popup_width,
-            .bg = .{ .r = 0x28, .g = 0x28, .b = 0x28 },
-            .selected_bg = .{ .r = 0x37, .g = 0x52, .b = 0x73 },
-            // FIXME: Use this one, much better.
-            // .selected_bg = .{ .r = 0x87, .g = 0xAF, .b = 0xD7 },
+            .normal = .{
+                .bg = .{ .r = 0x28, .g = 0x28, .b = 0x28 },
+                .fg = .{ .r = 0xaa, .g = 0xaa, .b = 0xaa },
+            },
+            .selected = .{
+                .bg = .{ .r = 0x87, .g = 0xAF, .b = 0xD7 },
+                .fg = .{ .r = 0x00, .g = 0x00, .b = 0x00 },
+            },
+            .border = .{
+                .double = .{
+                    .bg = .{ .r = 0x28, .g = 0x28, .b = 0x28 },
+                    .fg = .{ .r = 0xaa, .g = 0xaa, .b = 0xaa },
+                },
+            },
         });
         defer popup.deinit(alloc);
 
