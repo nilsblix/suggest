@@ -57,11 +57,11 @@ pub fn goto(self: Self, row: usize, col: usize) !void {
     try self.stdout.print("\x1b[{d};{d}H", .{ row, col });
 }
 
-fn saveCursor(self: Self) !void {
+pub fn saveCursor(self: Self) !void {
     try self.stdout.writeAll("\x1b[s");
 }
 
-fn restoreCursor(self: Self) !void {
+pub fn restoreCursor(self: Self) !void {
     try self.stdout.writeAll("\x1b[u");
 }
 
@@ -71,6 +71,10 @@ fn setBgColor(self: Self, color: Color) !void {
 
 fn resetSgr(self: Self) !void {
     try self.stdout.writeAll("\x1b[0m");
+}
+
+pub fn clearLine(self: Self) !void {
+    try self.stdout.writeAll("\x1b[K");
 }
 
 /// TODO: Add borders.
