@@ -174,7 +174,7 @@ pub fn getLineExcludeLastWord(line: []const u8, idx: usize) []const u8 {
 
     while (true) {
         if (isSeparatorByte(line[i])) {
-            return line[0..i + 1];
+            return line[0 .. i + 1];
         }
 
         if (i == 0) {
@@ -287,10 +287,10 @@ pub fn display(self: *const Self, content: [][]const u8, selected: usize) !void 
         const right_col = start_col + outer_width - 1;
 
         // Corners
-        try self.terminal.printAtBgFg(top_row, left_col, sides[0], border_bg, border_fg);   // 1
-        try self.terminal.printAtBgFg(top_row, right_col, sides[2], border_bg, border_fg);  // 3
-        try self.terminal.printAtBgFg(bot_row, right_col, sides[4], border_bg, border_fg);  // 5
-        try self.terminal.printAtBgFg(bot_row, left_col, sides[6], border_bg, border_fg);   // 7
+        try self.terminal.printAtBgFg(top_row, left_col, sides[0], border_bg, border_fg); // 1
+        try self.terminal.printAtBgFg(top_row, right_col, sides[2], border_bg, border_fg); // 3
+        try self.terminal.printAtBgFg(bot_row, right_col, sides[4], border_bg, border_fg); // 5
+        try self.terminal.printAtBgFg(bot_row, left_col, sides[6], border_bg, border_fg); // 7
 
         // Top and bottom horizontal lines
         var dx: usize = 1;
@@ -302,7 +302,7 @@ pub fn display(self: *const Self, content: [][]const u8, selected: usize) !void 
         // Vertical lines
         var dy: usize = 1;
         while (dy < outer_height - 1) : (dy += 1) {
-            try self.terminal.printAtBgFg(start_row + dy, left_col, sides[7], border_bg, border_fg);  // 8
+            try self.terminal.printAtBgFg(start_row + dy, left_col, sides[7], border_bg, border_fg); // 8
             try self.terminal.printAtBgFg(start_row + dy, right_col, sides[3], border_bg, border_fg); // 4
         }
     }

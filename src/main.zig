@@ -105,7 +105,7 @@ const Config = struct {
                 // where # represents the cursor.
                 const left = Popup.getLineExcludeLastWord(self.line, self.cursor_idx);
                 const right = self.line[self.cursor_idx..];
-                const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{left, item, right});
+                const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
 
                 var out_buf: [1024]u8 = undefined;
                 var out_file_writer = std.fs.File.stdout().writer(&out_buf);
@@ -120,7 +120,7 @@ const Config = struct {
                 // the line.
                 const left = self.line[0..self.cursor_idx];
                 const right = self.line[self.cursor_idx..];
-                const slice = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{left, b, right});
+                const slice = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ left, b, right });
 
                 var out_buf: [16]u8 = undefined;
                 var out_file_writer = std.fs.File.stdout().writer(&out_buf);
@@ -128,7 +128,7 @@ const Config = struct {
 
                 try out.writeAll(slice);
                 try out.flush();
-            }
+            },
         }
     }
 };
