@@ -1,19 +1,38 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+pub fn printInitScript(shell: []const u8) !void {
+    var stdout_wrapper = std.fs.File.stdout().writer(&.{});
+    var stdout = &stdout_wrapper.interface;
+
+    if (std.mem.eql(u8, shell, "zsh")) {
+        try stdout.writeAll(ZSH_INIT_SCRIPT);
+        return;
+    }
+
+    if (std.mem.eql(u8, shell, "bash")) {
+        try stdout.writeAll(BASH_INIT_SCRIPT);
+        return;
+    }
+
+    try stdout.print("Found no init-script for shell: {s}\n", .{shell});
+}
+
 pub const ZSH_INIT_SCRIPT =
     \\ suggest-widget() {
     \\   local line="$LBUFFER$RBUFFER"
     \\   local cursor_index=${#LBUFFER}
     \\   local old_rbuffer="$RBUFFER"
     \\
+    \\   # FIXME: Use $PATH and name the program `suggest`
+    \\   # to now have to use this path.
     \\   local new_command=$(
     \\     ~/Code/suggest/zig-out/bin/suggest \
-    \\       --path ~/.zsh_history \
-    \\       --line="$line" \
+    \\       --file ~/.zsh_history \
+    \\       --command="$line" \
     \\       --cursor-idx="$cursor_index" \
     \\       --max-height=15 \
-    \\       --max-width=20 \
+    \\       --max-width=40 \
     \\       --bigram-weight=400
     \\   ) || return
     \\
@@ -42,11 +61,11 @@ pub const BASH_INIT_SCRIPT =
     \\ 
     \\   local new_command=$(
     \\     ~/Code/suggest/zig-out/bin/suggest \
-    \\       --path "$HOME/.bash_history" \
-    \\       --line="$line" \
+    \\       --file "$HOME/.bash_history" \
+    \\       --command="$line" \
     \\       --cursor-idx="$cursor_index" \
     \\       --max-height=15 \
-    \\       --max-width=20 \
+    \\       --max-width=40 \
     \\       --bigram-weight=400
     \\   ) || return
     \\ 

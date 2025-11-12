@@ -4,17 +4,13 @@ const Terminal = @import("Terminal.zig");
 
 const Self = @This();
 
-const ColorPair = struct {
-    fg: Terminal.Color,
-    bg: Terminal.Color,
-};
-
-const Border = union(enum) {
+// FIXME: REMOve pub
+pub const Border = union(enum) {
     none,
-    rounded: ColorPair,
-    square: ColorPair,
-    double: ColorPair,
-    simple: ColorPair,
+    rounded,
+    square,
+    double,
+    simple,
 
     /// Returns optional border chars in this order:
     /// `1 2 3
@@ -23,7 +19,7 @@ const Border = union(enum) {
     pub fn sides(self: Border) ?[8][]const u8 {
         switch (self) {
             .none => return null,
-            .rounded => |_| return .{
+            .rounded => return .{
                 "\u{256D}",
                 "\u{2500}",
                 "\u{256E}",
@@ -33,7 +29,7 @@ const Border = union(enum) {
                 "\u{2570}",
                 "\u{2502}",
             },
-            .square => |_| return .{
+            .square => return .{
                 "\u{250C}",
                 "\u{2500}",
                 "\u{2510}",
@@ -43,7 +39,7 @@ const Border = union(enum) {
                 "\u{2514}",
                 "\u{2502}",
             },
-            .double => |_| return .{
+            .double => return .{
                 "\u{2554}",
                 "\u{2550}",
                 "\u{2557}",
@@ -53,7 +49,7 @@ const Border = union(enum) {
                 "\u{255A}",
                 "\u{2551}",
             },
-            .simple => |_| return .{
+            .simple => return .{
                 "+",
                 "-",
                 "+",
@@ -69,8 +65,10 @@ const Border = union(enum) {
 
 const Config = struct {
     max_width: usize,
-    normal: ColorPair,
-    selected: ColorPair,
+    /// Normal text for suggestions.
+    normal: Terminal.TextStyle,
+    /// The style of the current selected option.
+    selected: Terminal.TextStyle,
     border: Border = .none,
 };
 
@@ -83,6 +81,7 @@ pub fn init(alloc: Allocator, config: Config) !Self {
     errdefer alloc.destroy(terminal);
 
     terminal.* = try Terminal.init();
+    errdefer terminal.deinit();
     try terminal.enableRawMode();
 
     return Self{
@@ -226,170 +225,128 @@ pub fn getLastTwoWords(complete_line: []const u8, cursor_idx: usize) LastTwoWord
     return .{ .prev = prev_slice, .curr = current_slice };
 }
 
-pub fn display(self: *const Self, content: [][]const u8, selected: usize) !void {
-    if (content.len == 0) return;
+fn requestedNewlines(cursor: Terminal.Cursor, want_below: usize, term_size: Terminal.Size) usize {
+    const lines_left = term_size.rows - cursor.row; // rows strictly below cursor
+    return if (lines_left >= want_below) 0 else want_below - lines_left;
+}
 
+fn appendNewlines(self: *const Self, need: usize, cursor: *Terminal.Cursor, term_size: Terminal.Size) !void {
+    if (need == 0) return;
+
+    try self.terminal.goto(term_size.rows, 1);
+    for (0..need) |_| {
+        try self.terminal.stdout.writeAll("\n");
+        try self.terminal.stdout.flush();
+    }
+
+    // Prompt visually moved up by `need` rows.
+    cursor.row = if (cursor.row > need) cursor.row - need else 1;
+    try self.terminal.goto(cursor.row, cursor.col);
+}
+
+fn getContentWidth(self: *const Self, content: [][]const u8) usize {
     var width: usize = 0;
     for (content) |line| {
         const candidate = @min(line.len, self.config.max_width);
         if (candidate > width) width = candidate;
     }
-    // We still want to draw something even if all suggestions are empty.
-    if (width == 0) width = self.config.max_width;
-
-    const cursor = try self.terminal.getCursor();
-
-    const has_border = self.config.border != .none;
-    const padding = blk: {
-        const padded: usize = 2;
-        const unpadded: usize = 0;
-        break :blk if (has_border) padded else unpadded;
-    };
-
-    const outer_width: usize = width + padding;
-    const outer_height: usize = content.len + padding;
-    const start_row = cursor.row + 1;
-    const start_col: usize = cursor.col;
-
-    // Background fill for the full drawn area (including border if present).
-    try self.terminal.drawRect(start_row, start_col, outer_width, outer_height, self.config.normal.bg);
-
-    // Draw border if configured.
-    if (has_border) {
-        const sides = self.config.border.sides() orelse return error.ConflictingBorder;
-
-        // Obtain border colors (fall back to regular fg/bg if variant is malformed).
-        var border_bg = self.config.normal.bg;
-        var border_fg = self.config.normal.fg;
-        switch (self.config.border) {
-            .none => {},
-            .rounded => |cp| {
-                border_bg = cp.bg;
-                border_fg = cp.fg;
-            },
-            .square => |cp| {
-                border_bg = cp.bg;
-                border_fg = cp.fg;
-            },
-            .double => |cp| {
-                border_bg = cp.bg;
-                border_fg = cp.fg;
-            },
-            .simple => |cp| {
-                border_bg = cp.bg;
-                border_fg = cp.fg;
-            },
-        }
-
-        const top_row = start_row;
-        const bot_row = start_row + outer_height - 1;
-        const left_col = start_col;
-        const right_col = start_col + outer_width - 1;
-
-        // Corners
-        try self.terminal.printAtBgFg(top_row, left_col, sides[0], border_bg, border_fg); // 1
-        try self.terminal.printAtBgFg(top_row, right_col, sides[2], border_bg, border_fg); // 3
-        try self.terminal.printAtBgFg(bot_row, right_col, sides[4], border_bg, border_fg); // 5
-        try self.terminal.printAtBgFg(bot_row, left_col, sides[6], border_bg, border_fg); // 7
-
-        // Top and bottom horizontal lines
-        var dx: usize = 1;
-        while (dx < outer_width - 1) : (dx += 1) {
-            try self.terminal.printAtBgFg(top_row, start_col + dx, sides[1], border_bg, border_fg); // 2
-            try self.terminal.printAtBgFg(bot_row, start_col + dx, sides[5], border_bg, border_fg); // 6
-        }
-
-        // Vertical lines
-        var dy: usize = 1;
-        while (dy < outer_height - 1) : (dy += 1) {
-            try self.terminal.printAtBgFg(start_row + dy, left_col, sides[7], border_bg, border_fg); // 8
-            try self.terminal.printAtBgFg(start_row + dy, right_col, sides[3], border_bg, border_fg); // 4
-        }
-    }
-
-    // Draw content within the inner area (indented by border if present).
-    for (content, 0..) |line, iidx| {
-        const line_padding = blk: {
-            const padded: usize = 1;
-            const unpadded: usize = 0;
-            break :blk if (has_border) padded else unpadded;
-        };
-        const row = start_row + line_padding + iidx;
-        const text_col = start_col + line_padding;
-
-        var bg = self.config.normal.bg;
-        var fg = self.config.normal.fg;
-        if (iidx == selected) {
-            // We want to draw the entire line with the selected background, as
-            // without it only the text-covered part of the line becomes
-            // highlighted.
-            bg = self.config.selected.bg;
-            fg = self.config.selected.fg;
-            try self.terminal.drawRect(row, text_col, width, 1, bg);
-        }
-
-        if (line.len > width) {
-            if (width <= 3) {
-                // Degenerate case. Not enough room for ellipsis + content.
-                // Just hard cut to max_width.
-                const slice = line[0..width];
-                try self.terminal.printAtBgFg(row, text_col, slice, bg, fg);
-            } else {
-                const visible_len = width - 1;
-
-                // Print the visible section.
-                try self.terminal.printAtBgFg(row, text_col, line[0..visible_len], bg, fg);
-
-                // Print the dots after the visible section.
-                const dots_char = "\u{2026}";
-                const dots_col = text_col + visible_len;
-                try self.terminal.printAtBgFg(row, dots_col, dots_char, bg, fg);
-            }
-        } else {
-            // Nothing special. Simply print the content.
-            try self.terminal.printAtBgFg(row, text_col, line, bg, fg);
-        }
-    }
+    return width;
 }
 
-/// Clears the area which was used to draw in `self.display`. Uses the same
-/// `content` to simply get the correct dimensions.
+fn getOuterDims(self: *const Self, inner_width: usize, inner_height: usize) struct { usize, usize } {
+    const use_border = self.config.border != .none;
+
+    const padding = blk: {
+        const with_padding: usize = 2;
+        const no_padding: usize = 0;
+        break :blk if (use_border) with_padding else no_padding;
+    };
+
+    const outer_width = inner_width + padding;
+    const outer_height = inner_height + padding;
+    return .{ outer_width, outer_height };
+}
+
+pub fn render(self: *const Self, content: [][]const u8, selected: usize) !void {
+    if (content.len == 0) {
+        return;
+    }
+
+    try self.terminal.hideCursor();
+
+    const inner_width = @max(self.getContentWidth(content), 1);
+    const inner_height = content.len;
+
+    var cursor = try self.terminal.getCursor();
+    const term_size = try self.terminal.getSize();
+
+    const outer = self.getOuterDims(inner_width, inner_height);
+    const want_below = outer.@"1";
+    const use_border = self.config.border != .none;
+
+    const need = requestedNewlines(cursor, want_below, term_size);
+    try self.appendNewlines(need, &cursor, term_size);
+
+    try self.terminal.drawRectFlushless(
+        cursor.row + 1,
+        cursor.col,
+        inner_width,
+        inner_height,
+        self.config.normal,
+        self.config.border.sides(),
+    );
+
+    const text_pos = Terminal.Cursor{
+        .row = if (use_border) cursor.row + 2 else cursor.row + 1,
+        .col = if (use_border) cursor.col + 1 else cursor.col,
+    };
+
+    for (content, 0..) |suggestion, idx| {
+        const row = text_pos.row + idx;
+
+        const style = if (idx == selected) self.config.selected else self.config.normal;
+        if (suggestion.len > inner_width) {
+            if (inner_width == 1) {
+                // There is only room for a single character, so draw an ellipsis.
+                try self.terminal.printFlushless(row, text_pos.col, "\u{2026}", style);
+            } else {
+                const visible_len = inner_width - 1;
+                // Print the visible part first.
+                try self.terminal.printFlushless(row, text_pos.col, suggestion[0..visible_len], style);
+                const dots_char = "\u{2026}";
+                const dots_col = text_pos.col + visible_len;
+                // Print the ellipsis (due to content.len > width).
+                try self.terminal.printFlushless(row, dots_col, dots_char, style);
+            }
+        } else {
+            // We can draw the full line.
+            try self.terminal.printFlushless(row, text_pos.col, suggestion, style);
+        }
+    }
+    try self.terminal.showCursor();
+    try self.terminal.stdout.flush();
+}
+
 pub fn clear(self: *const Self, content: [][]const u8) !void {
     if (content.len == 0) return;
 
-    // Same calculations as in `display`.
-    var width: usize = 0;
-    for (content) |line| {
-        const candidate = @min(line.len, self.config.max_width);
-        if (candidate > width) width = candidate;
-    }
-    if (width == 0) width = self.config.max_width;
+    try self.terminal.hideCursor();
+    try self.terminal.saveCursor();
+
+    const inner_width = @max(self.getContentWidth(content), 1);
+    const inner_height = content.len;
 
     const cursor = try self.terminal.getCursor();
 
-    try self.terminal.saveCursor();
-    errdefer self.terminal.restoreCursor() catch {};
+    const outer = self.getOuterDims(inner_width, inner_height);
 
-    const has_border = self.config.border != .none;
-    const start_row = cursor.row + blk: {
-        const pad: usize = 0;
-        const unpad: usize = 1;
-        break :blk if (has_border) pad else unpad;
-    };
-    const height = content.len + blk: {
-        const pad: usize = 2;
-        const unpad: usize = 0;
-        break :blk if (has_border) pad else unpad;
-    };
-
-    var dy: usize = 0;
-    while (dy < height) : (dy += 1) {
-        try self.terminal.goto(start_row + dy, cursor.col);
+    for (cursor.row + 1..cursor.row + 2 + outer.@"0") |row| {
+        try self.terminal.goto(row, cursor.col);
         try self.terminal.clearLine();
     }
 
     try self.terminal.restoreCursor();
-    try self.terminal.stdout.flush();
+    try self.terminal.showCursor();
 }
 
 pub const SuggestionReturn = union(enum) {
@@ -410,7 +367,7 @@ pub fn handleInput(self: *Self, suggestions: [][]const u8) !SuggestionReturn {
     var buf: [8]u8 = undefined;
 
     while (true) {
-        try self.display(suggestions, selected);
+        try self.render(suggestions, selected);
         // Read one byte at a time (which is possible due to raw-mode).
         const n = try self.terminal.tty_file.read(&buf);
         if (n == 0) continue;

@@ -53,67 +53,124 @@ pub fn deinit(self: *Self) void {
     self.tty_file.close();
 }
 
-pub fn goto(self: Self, row: usize, col: usize) !void {
+pub fn goto(self: *Self, row: usize, col: usize) !void {
     try self.stdout.print("\x1b[{d};{d}H", .{ row, col });
 }
 
-pub fn saveCursor(self: Self) !void {
+pub fn saveCursor(self: *Self) !void {
     try self.stdout.writeAll("\x1b[s");
 }
 
-pub fn restoreCursor(self: Self) !void {
+pub fn restoreCursor(self: *Self) !void {
     try self.stdout.writeAll("\x1b[u");
 }
 
-fn setBgColor(self: Self, color: Color) !void {
+pub fn hideCursor(self: *Self) !void {
+    try self.stdout.writeAll("\x1b[?251");
+}
+
+pub fn showCursor(self: *Self) !void {
+    try self.stdout.writeAll("\x1b[?25h");
+}
+
+fn setBgColor(self: *Self, color: Color) !void {
     try self.stdout.print("\x1b[48;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
 }
 
-fn setFgColor(self: Self, color: Color) !void {
+fn setFgColor(self: *Self, color: Color) !void {
     try self.stdout.print("\x1b[38;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
 }
 
-fn resetSgr(self: Self) !void {
+fn setBold(self: *Self) !void {
+    try self.stdout.writeAll("\x1b[1m");
+}
+
+pub const TextStyle = struct {
+    bg: ?Color = null,
+    fg: ?Color = null,
+    bold: bool = false,
+};
+
+/// `defer resetSgr` after this.
+fn setStyle(self: *Self, style: TextStyle) !void {
+    if (style.bg) |bg| {
+        try setBgColor(self, bg);
+    }
+    if (style.fg) |fg| {
+        try setFgColor(self, fg);
+    }
+    if (style.bold) {
+        try setBold(self);
+    }
+}
+
+fn resetSgr(self: *Self) !void {
     try self.stdout.writeAll("\x1b[0m");
 }
 
-pub fn clearLine(self: Self) !void {
+pub fn clearLine(self: *Self) !void {
     try self.stdout.writeAll("\x1b[K");
 }
 
-/// TODO: Add borders.
-pub fn drawRect(
-    self: Self,
+/// Renders a rectangle to stdout. If border is not null, then it will print
+/// out a rectangle with that border. Width and height then becomes
+/// inner-width, and inner-height.
+pub fn drawRectFlushless(
+    self: *Self,
     row: usize,
     col: usize,
     width: usize,
     height: usize,
-    color: Color,
+    style: TextStyle,
+    border: ?[8][]const u8,
 ) !void {
-    // Ensure we leave the cursor where we found it and reset any SGR.
     try saveCursor(self);
-    errdefer restoreCursor(self) catch {};
-    errdefer resetSgr(self) catch {};
+    defer restoreCursor(self) catch {};
+    defer resetSgr(self) catch {};
+
+    const use_border = border != null;
+
+    const outer_width = if (use_border) width + 2 else width;
+    const outer_height = if (use_border) height + 2 else height;
 
     var dy: usize = 0;
-    while (dy < height) : (dy += 1) {
-        // 1. Move to start of the current line of the rectangle
-        try goto(self, row + dy, col);
-
-        // 2. Set background color for the row
-        try setBgColor(self, color);
-
-        // 3. Erase width characters from the cursor position without moving
-        // the cursor and without causing wrap/scroll (CSI Ps X)
-        try self.stdout.print("\x1b[{d}X", .{width});
-
-        // 4. Reset attributes before next iteration to avoid leaking SGR
-        try resetSgr(self);
+    while (dy < outer_height) : (dy += 1) {
+        var dx: usize = 0;
+        while (dx < outer_width) : (dx += 1) {
+            try printFlushless(self, row + dy, col + dx, " ", style);
+        }
     }
 
-    // Restore cursor to original position and flush
-    try restoreCursor(self);
-    try self.stdout.flush();
+    if (border) |b| {
+        const bottom_right = Cursor{
+            .row = row + 1 + height,
+            .col = col + 1 + width,
+        };
+
+        // Top-left
+        try printFlushless(self, row, col, b[0], style);
+        // Top horizontal
+        for (col + 1..bottom_right.col) |current_col| {
+            try printFlushless(self, row, current_col, b[1], style);
+        }
+        // Top-right
+        try printFlushless(self, row, bottom_right.col, b[2], style);
+
+        // Left and right vertical
+        for ( row + 1..bottom_right.row) |current_row| {
+            try printFlushless(self, current_row, col, b[7], style);
+            try printFlushless(self, current_row, bottom_right.col, b[3], style);
+        }
+
+        // Bottom-left
+        try printFlushless(self, bottom_right.row, col, b[6], style);
+        // Bottom horizontal
+        for ( col + 1..bottom_right.col) |current_col| {
+            try printFlushless(self, bottom_right.row, current_col, b[5], style);
+        }
+        // Bottom-right
+        try printFlushless(self, bottom_right.row, bottom_right.col, b[4], style);
+    }
 }
 
 pub const Cursor = struct {
@@ -121,11 +178,16 @@ pub const Cursor = struct {
     col: usize,
 };
 
+pub const Size = struct {
+    rows: usize,
+    cols: usize,
+};
+
 /// We ask the terminal for the cursor position via
 /// `ESC [ 6 n`,
 /// which the terminal will respond on stdin with
 /// `ESC [ {row} ; {col} R`.
-pub fn getCursor(self: Self) !Cursor {
+pub fn getCursor(self: *Self) !Cursor {
     // 1. Ask the terminal for cursor position: ESC [ 6 n
     try self.stdout.writeAll("\x1b[6n");
     try self.stdout.flush();
@@ -177,44 +239,31 @@ pub fn getCursor(self: Self) !Cursor {
     return .{ .row = row, .col = col };
 }
 
-pub fn printAt(self: Self, row: usize, col: usize, text: []const u8) !void {
+/// Query terminal size (rows, cols) by moving to bottom-right and reading
+/// clamped cursor position. Uses save/restore to avoid disturbing the user
+/// cursor.
+pub fn getSize(self: *Self) !Size {
     try saveCursor(self);
-    errdefer restoreCursor(self) catch {};
+    defer restoreCursor(self) catch {};
 
-    try goto(self, row, col);
-    try self.stdout.writeAll(text);
+    // Jump to an exaggerated bottom-right; terminal clamps to visible area.
+    try goto(self, 9999, 9999);
 
-    try restoreCursor(self);
-    try self.stdout.flush();
+    const pos = try getCursor(self);
+
+    return .{ .rows = pos.row, .cols = pos.col };
 }
 
-pub fn printAtBg(self: Self, row: usize, col: usize, text: []const u8, bg: Color) !void {
+/// Remember to flush the result.
+pub fn printFlushless(self: *Self, row: usize, col: usize, text: []const u8, style: TextStyle) !void {
     try saveCursor(self);
-    errdefer restoreCursor(self) catch {};
-    errdefer resetSgr(self) catch {};
+    defer restoreCursor(self) catch {};
+    defer resetSgr(self) catch {};
+
+    try setStyle(self, style);
 
     try goto(self, row, col);
-    try setBgColor(self, bg);
     try self.stdout.writeAll(text);
-    try resetSgr(self);
-
-    try restoreCursor(self);
-    try self.stdout.flush();
-}
-
-pub fn printAtBgFg(self: Self, row: usize, col: usize, text: []const u8, bg: Color, fg: Color) !void {
-    try saveCursor(self);
-    errdefer restoreCursor(self) catch {};
-    errdefer resetSgr(self) catch {};
-
-    try goto(self, row, col);
-    try setBgColor(self, bg);
-    try setFgColor(self, fg);
-    try self.stdout.writeAll(text);
-    try resetSgr(self);
-
-    try restoreCursor(self);
-    try self.stdout.flush();
 }
 
 pub fn enableRawMode(self: *Self) !void {
