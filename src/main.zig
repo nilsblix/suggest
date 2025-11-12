@@ -65,7 +65,7 @@ const Config = struct {
     fn init(args: anytype) !Config {
         var config = Config{
             .program = .{},
-            .file =  .{ .path = undefined },
+            .file = .{ .path = undefined },
         };
 
         // \\-h, --help                    Display this help and exit.

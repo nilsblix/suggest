@@ -157,7 +157,7 @@ pub fn drawRectFlushless(
         try printFlushless(self, row, bottom_right.col, b[2], style);
 
         // Left and right vertical
-        for ( row + 1..bottom_right.row) |current_row| {
+        for (row + 1..bottom_right.row) |current_row| {
             try printFlushless(self, current_row, col, b[7], style);
             try printFlushless(self, current_row, bottom_right.col, b[3], style);
         }
@@ -165,7 +165,7 @@ pub fn drawRectFlushless(
         // Bottom-left
         try printFlushless(self, bottom_right.row, col, b[6], style);
         // Bottom horizontal
-        for ( col + 1..bottom_right.col) |current_col| {
+        for (col + 1..bottom_right.col) |current_col| {
             try printFlushless(self, bottom_right.row, current_col, b[5], style);
         }
         // Bottom-right
