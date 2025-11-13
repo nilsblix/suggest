@@ -2,7 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
 
-const backend = @import("backend.zig");
+const parsing = @import("parsing.zig");
+const General = @import("General.zig");
 const shell = @import("shell.zig");
 const Popup = @import("Popup.zig");
 
@@ -68,17 +69,6 @@ const Config = struct {
             .file = .{ .path = undefined },
         };
 
-        // \\-h, --help                    Display this help and exit.
-        // \\--init <str>                  Print the init script for the specified shell.
-        // \\--variant <str>               Which variant of the program to perform.
-        // \\--mode <str>                  The way that suggestions are given.
-        // \\--line <str>                  The current, unfinished command.
-        // \\--cursor-idx <usize>          The 0-based cursor index of the current, unfinished command.
-        // \\-p, --path <str>              The path to the history file, such as ~/.zsh_history or ~/.bash_history.
-        // \\-w, --max-width <usize>       The maximum amount of suggestions to be outputed.
-        // \\-h, --max-height <usize>      The maximum amount of suggestions to be outputed.
-        // \\-b, --bigram-weight <f64>     A multiple of how much the frequency in relation to the previous word should matter compared to the overall frequency of the word.
-
         if (args.file) |f| {
             config.file.path = f;
         } else return error.NoHistoryFilePath;
@@ -115,23 +105,11 @@ const Config = struct {
     }
 
     fn run(self: Config, alloc: Allocator) !void {
-        const file = try std.fs.openFileAbsolute(self.file.path, .{});
+        var data = try parsing.Data.init(alloc, self.file.path);
+        defer data.deinit(alloc);
 
-        // For simplicity's sake we use a small buffer for now. We should expand
-        // this later on to support better completion.
-        //
-        // TODO: Using 200kb memory and rebuilding the Markov struct each time
-        // the program is run is very inefficient. The markov could maybe be
-        // serialized on update, and deserialized when ran to minimize latency.
-        //
-        // Note: We probably even want to read from the file backwards.
-        var buf: [200 * 1024]u8 = undefined;
-
-        const n = try file.readAll(buf[0..]);
-        const data: []const u8 = buf[0..n];
-
-        var markov = try backend.Markov.init(alloc, data);
-        defer markov.deinit();
+        var general = try General.init(alloc, data.*);
+        defer general.deinit();
 
         var popup = try Popup.init(alloc, .{
             .max_width = self.max_popup_width,
@@ -144,13 +122,17 @@ const Config = struct {
         });
         defer popup.deinit(alloc);
 
-        const last_two = Popup.getLastTwoWords(self.program.command, self.program.cursor_idx);
+        const current_command_slice = self.program.command[0..];
+        var current_command = try parsing.Command.fromSlice(alloc, current_command_slice);
+        defer current_command.deinit(alloc);
+
+        const pair = parsing.getRelevantBigram(current_command_slice, @max(0, self.program.cursor_idx - 1));
 
         var suggestions = try alloc.alloc([]const u8, self.max_popup_height);
         defer alloc.free(suggestions);
 
         const mbw = self.markov_bigram_weight;
-        const count = try markov.suggest(alloc, suggestions[0..], last_two.prev, last_two.curr, mbw);
+        const count = try general.suggest(alloc, suggestions[0..], pair.fst, pair.snd, mbw);
         if (count == 0) return;
 
         // Only display the returned suggestions. We previously supplied
@@ -167,7 +149,7 @@ const Config = struct {
                 // We need to replace the current word with item. Ex:
                 // `git br# -> git branch`
                 // where # represents the cursor.
-                const left = Popup.getLineExcludeLastWord(self.program.command, self.program.cursor_idx);
+                const left = parsing.popLeftTokenOfIdx(self.program.command, self.program.cursor_idx);
                 const right = self.program.command[self.program.cursor_idx..];
                 const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
 
@@ -194,8 +176,6 @@ const Config = struct {
                 try out.flush();
             },
         }
-        // Clear the popup when the program terminates.
-        try popup.clear(suggestions[0..]);
     }
 };
 
