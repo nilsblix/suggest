@@ -106,8 +106,8 @@ fn appendNewlines(self: *const Self, need: usize, cursor: *Terminal.Cursor, term
 
     try self.terminal.goto(term_size.rows, 1);
     for (0..need) |_| {
-        try self.terminal.stdout.writeAll("\n");
-        try self.terminal.stdout.flush();
+        try self.terminal.tty_writer.interface.writeAll("\n");
+        try self.terminal.tty_writer.interface.flush();
     }
 
     // Prompt visually moved up by `need` rows.
@@ -195,7 +195,7 @@ pub fn render(self: *const Self, content: [][]const u8, selected: usize) !void {
         }
     }
     try self.terminal.showCursor();
-    try self.terminal.stdout.flush();
+    try self.terminal.tty_writer.interface.flush();
 }
 
 pub fn clear(self: *const Self, content: [][]const u8) !void {

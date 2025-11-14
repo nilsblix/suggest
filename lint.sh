@@ -2,6 +2,6 @@
 
 set -ex
 
-zig test src/parsing.zig
+zig build test --summary failures
 zig fmt src
 zig build

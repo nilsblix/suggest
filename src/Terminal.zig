@@ -12,10 +12,6 @@ in_buf: [1024]u8 = undefined,
 tty_writer: std.fs.File.Writer,
 tty_reader: std.fs.File.Reader,
 
-/// Public interfaces for reading/writing.
-stdout: *std.io.Writer,
-stdin: *std.io.Reader,
-
 /// Original terminal settings (if raw mode was enabled)
 orig_termios: ?posix.termios = null,
 
@@ -38,9 +34,6 @@ pub fn init() !Self {
     term.tty_writer = term.tty_file.writer(&term.out_buf);
     term.tty_reader = term.tty_file.reader(&term.in_buf);
 
-    term.stdout = &term.tty_writer.interface;
-    term.stdin = &term.tty_reader.interface;
-
     term.orig_termios = null;
 
     return term;
@@ -54,35 +47,35 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn goto(self: *Self, row: usize, col: usize) !void {
-    try self.stdout.print("\x1b[{d};{d}H", .{ row, col });
+    try self.tty_writer.interface.print("\x1b[{d};{d}H", .{ row, col });
 }
 
 pub fn saveCursor(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[s");
+    try self.tty_writer.interface.writeAll("\x1b[s");
 }
 
 pub fn restoreCursor(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[u");
+    try self.tty_writer.interface.writeAll("\x1b[u");
 }
 
 pub fn hideCursor(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[?251");
+    try self.tty_writer.interface.writeAll("\x1b[?251");
 }
 
 pub fn showCursor(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[?25h");
+    try self.tty_writer.interface.writeAll("\x1b[?25h");
 }
 
 fn setBgColor(self: *Self, color: Color) !void {
-    try self.stdout.print("\x1b[48;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
+    try self.tty_writer.interface.print("\x1b[48;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
 }
 
 fn setFgColor(self: *Self, color: Color) !void {
-    try self.stdout.print("\x1b[38;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
+    try self.tty_writer.interface.print("\x1b[38;2;{d};{d};{d}m", .{ color.r, color.g, color.b });
 }
 
 fn setBold(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[1m");
+    try self.tty_writer.interface.writeAll("\x1b[1m");
 }
 
 pub const TextStyle = struct {
@@ -105,14 +98,14 @@ fn setStyle(self: *Self, style: TextStyle) !void {
 }
 
 fn resetSgr(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[0m");
+    try self.tty_writer.interface.writeAll("\x1b[0m");
 }
 
 pub fn clearLine(self: *Self) !void {
-    try self.stdout.writeAll("\x1b[K");
+    try self.tty_writer.interface.writeAll("\x1b[K");
 }
 
-/// Renders a rectangle to stdout. If border is not null, then it will print
+/// Renders a rectangle to tty_writer.interface. If border is not null, then it will print
 /// out a rectangle with that border. Width and height then becomes
 /// inner-width, and inner-height.
 pub fn drawRectFlushless(
@@ -185,19 +178,19 @@ pub const Size = struct {
 
 /// We ask the terminal for the cursor position via
 /// `ESC [ 6 n`,
-/// which the terminal will respond on stdin with
+/// which the terminal will respond on tty_reader.interface with
 /// `ESC [ {row} ; {col} R`.
 pub fn getCursor(self: *Self) !Cursor {
     // 1. Ask the terminal for cursor position: ESC [ 6 n
-    try self.stdout.writeAll("\x1b[6n");
-    try self.stdout.flush();
+    try self.tty_writer.interface.writeAll("\x1b[6n");
+    try self.tty_writer.interface.flush();
 
     var buf: [32]u8 = undefined;
     var got: usize = 0;
 
     // 2. Read until we see "R" or run out of buffer.
     while (got < buf.len) {
-        const n = try self.stdin.readSliceShort(buf[got .. got + 1]);
+        const n = try self.tty_reader.interface.readSliceShort(buf[got .. got + 1]);
         if (n == 0) break; // EOF-ish
         got += n;
         if (buf[got - 1] == 'R') break;
@@ -263,7 +256,7 @@ pub fn printFlushless(self: *Self, row: usize, col: usize, text: []const u8, sty
     try setStyle(self, style);
 
     try goto(self, row, col);
-    try self.stdout.writeAll(text);
+    try self.tty_writer.interface.writeAll(text);
 }
 
 pub fn enableRawMode(self: *Self) !void {

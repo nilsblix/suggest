@@ -255,10 +255,13 @@ test "relevant bigram" {
             .fst = "nix",
             .snd = "fl",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -269,10 +272,13 @@ test "relevant bigram" {
             .fst = "nix",
             .snd = "fl",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -283,10 +289,13 @@ test "relevant bigram" {
             .fst = "git",
             .snd = "bi",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -297,10 +306,13 @@ test "relevant bigram" {
             .fst = "",
             .snd = "",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -311,10 +323,13 @@ test "relevant bigram" {
             .fst = "Hello,",
             .snd = "world!",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -325,10 +340,13 @@ test "relevant bigram" {
             .fst = "nix",
             .snd = "",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -339,10 +357,13 @@ test "relevant bigram" {
             .fst = "TESTS",
             .snd = "",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -353,10 +374,13 @@ test "relevant bigram" {
             .fst = "TESTS",
             .snd = "",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -367,10 +391,13 @@ test "relevant bigram" {
             .fst = "nix",
             .snd = "",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -381,10 +408,13 @@ test "relevant bigram" {
             .fst = "",
             .snd = "",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -395,10 +425,13 @@ test "relevant bigram" {
             .fst = "",
             .snd = "he",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -409,10 +442,13 @@ test "relevant bigram" {
             .fst = "nix",
             .snd = "flake",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 
     {
@@ -423,9 +459,12 @@ test "relevant bigram" {
             .fst = "",
             .snd = "hel",
         };
-        std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
-        std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
-        try std.testing.expect(Pair.eql(exp, ret));
-        std.debug.print("----------------------------\n", .{});
+        const ok = Pair.eql(exp, ret);
+        if (!ok) {
+            std.log.warn("\nPairs were not equal.", .{});
+            std.debug.print("Expected: ('{s}', '{s}')\n", .{ exp.fst, exp.snd });
+            std.debug.print("Got     : ('{s}', '{s}')\n", .{ ret.fst, ret.snd });
+        }
+        try std.testing.expect(ok);
     }
 }
