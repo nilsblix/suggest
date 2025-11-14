@@ -91,7 +91,7 @@ pub fn init(alloc: Allocator, config: Config) !Self {
 
 pub fn deinit(self: *Self, alloc: Allocator) void {
     // This disables raw-mode, so we are fine here. The user simply needs to
-    // call `popup.deinit`, and the entire structure will be cleaned up.
+    // call `menu.deinit`, and the entire structure will be cleaned up.
     self.terminal.deinit();
     alloc.destroy(self.terminal);
 }
@@ -226,7 +226,7 @@ pub const SuggestionReturn = union(enum) {
     quit,
 };
 
-/// Displays the popup and lets the user navigate.
+/// Displays the menu and lets the user navigate.
 /// Returns the selected index (0-based), `passed_through_byte` if the user
 /// keeps writing or quit if the user wants to `quit` viewing suggestions.
 pub fn handleInput(self: *Self, suggestions: [][]const u8) !SuggestionReturn {

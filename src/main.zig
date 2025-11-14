@@ -5,7 +5,7 @@ const clap = @import("clap");
 const parsing = @import("parsing.zig");
 const General = @import("General.zig");
 const shell = @import("shell.zig");
-const Popup = @import("Popup.zig");
+const Menu = @import("Menu.zig");
 
 const Program = struct {
     const Variant = enum {
@@ -54,8 +54,8 @@ const HistoryFile = struct {
 const Config = struct {
     program: Program,
     file: HistoryFile,
-    max_popup_width: usize = 20,
-    max_popup_height: usize = 8,
+    max_menu_width: usize = 20,
+    max_menu_height: usize = 8,
     /// This value should be quite high as otherwise commonly used commands,
     /// such as `cd` or `ls` trumps all other commands due to how the Markov
     /// score is currently calculated. This could be a good reason to think of
@@ -90,11 +90,11 @@ const Config = struct {
         }
 
         if (args.@"max-width") |w| {
-            config.max_popup_width = w;
+            config.max_menu_width = w;
         }
 
         if (args.@"max-height") |h| {
-            config.max_popup_height = h;
+            config.max_menu_height = h;
         }
 
         if (args.@"bigram-weight") |w| {
@@ -111,8 +111,8 @@ const Config = struct {
         var general = try General.init(alloc, data.*);
         defer general.deinit();
 
-        var popup = try Popup.init(alloc, .{
-            .max_width = self.max_popup_width,
+        var menu = try Menu.init(alloc, .{
+            .max_width = self.max_menu_width,
             .normal = .{},
             .selected = .{
                 .bg = .{ .r = 0x87, .g = 0xAF, .b = 0xD7 },
@@ -120,7 +120,7 @@ const Config = struct {
             },
             .border = .rounded,
         });
-        defer popup.deinit(alloc);
+        defer menu.deinit(alloc);
 
         const current_command_slice = self.program.command[0..];
         var current_command = try parsing.Command.fromSlice(alloc, current_command_slice);
@@ -128,7 +128,7 @@ const Config = struct {
 
         const pair = parsing.getRelevantBigram(current_command_slice, @max(0, self.program.cursor_idx - 1));
 
-        var suggestions = try alloc.alloc([]const u8, self.max_popup_height);
+        var suggestions = try alloc.alloc([]const u8, self.max_menu_height);
         defer alloc.free(suggestions);
 
         const mbw = self.markov_bigram_weight;
@@ -138,9 +138,9 @@ const Config = struct {
         // Only display the returned suggestions. We previously supplied
         // `suggestions[0..]`, which lead to segfault as the display tried to
         // iterate through unintialized memory.
-        const ret = try popup.handleInput(suggestions[0..count]);
-        // Clear the popup before we proceed.
-        try popup.clear(suggestions[0..]);
+        const ret = try menu.handleInput(suggestions[0..count]);
+        // Clear the menu before we proceed.
+        try menu.clear(suggestions[0..]);
         switch (ret) {
             .quit => return,
             .selected_index => |idx| {
@@ -220,10 +220,11 @@ pub fn main() !void {
 
 // Chores:
 //
+// [x] Restructure the backend, and make it possible to add new Models.
 // [ ] Read through the entire codebase, and check that the comments are up to
 //     date.
-// [ ] Split up/refactor Popup.display. Check that all comments make sense, and
-//     remove unecessary ones. Maybe rename it to Popup.render.
+// [x] Split up/refactor Menu.display. Check that all comments make sense, and
+//     remove unecessary ones. Maybe rename it to Menu.render.
 //
 // Fixes/bugs:
 //
@@ -240,7 +241,7 @@ pub fn main() !void {
 //     means that if the user wants to have their most recent patterns analyzed
 //     then we need to read the history file backwards.
 // [ ] Continously suggest new suggestions
-//     Ex: When typing, have the Popup window follow the cursor and sample and
+//     Ex: When typing, have the Menu window follow the cursor and sample and
 //     give new suggestions.
 //
 //     This would require a new way of outputting stdout to the command, as
