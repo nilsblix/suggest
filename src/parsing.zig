@@ -146,7 +146,10 @@ pub const Pair = struct {
     }
 };
 
+/// Returns the command from start to end, except the token left of the cursor.
 pub fn popLeftTokenOfIdx(command: []const u8, idx: usize) []const u8 {
+    if (command.len == 0) return "";
+
     var i = @min(command.len - 1, idx);
     while (true) {
         if (i == 0) {

@@ -126,7 +126,10 @@ const Config = struct {
         var current_command = try parsing.Command.fromSlice(alloc, current_command_slice);
         defer current_command.deinit(alloc);
 
-        const pair = parsing.getRelevantBigram(current_command_slice, @max(0, self.program.cursor_idx - 1));
+        const pair = pair: {
+            const cursor_idx = if (self.program.cursor_idx < 1) 0 else self.program.cursor_idx;
+            break :pair parsing.getRelevantBigram(current_command_slice, cursor_idx);
+        };
 
         var suggestions = try alloc.alloc([]const u8, self.max_menu_height);
         defer alloc.free(suggestions);
@@ -140,9 +143,9 @@ const Config = struct {
         // iterate through unintialized memory.
         const ret = try menu.handleInput(suggestions[0..count]);
         // Clear the menu before we proceed.
-        try menu.clear(suggestions[0..]);
+        try menu.clear(suggestions[0..count]);
         switch (ret) {
-            .quit => return,
+            .terminate_program => return,
             .selected_index => |idx| {
                 const item = suggestions[idx];
 

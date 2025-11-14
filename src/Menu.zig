@@ -223,14 +223,14 @@ pub fn clear(self: *const Self, content: [][]const u8) !void {
 pub const SuggestionReturn = union(enum) {
     selected_index: usize,
     pass_through_byte: u8,
-    quit,
+    terminate_program,
 };
 
 /// Displays the menu and lets the user navigate.
 /// Returns the selected index (0-based), `passed_through_byte` if the user
 /// keeps writing or quit if the user wants to `quit` viewing suggestions.
 pub fn handleInput(self: *Self, suggestions: [][]const u8) !SuggestionReturn {
-    if (suggestions.len == 0) return .quit;
+    if (suggestions.len == 0) return .terminate_program;
 
     var selected: usize = 0;
 
@@ -249,7 +249,7 @@ pub fn handleInput(self: *Self, suggestions: [][]const u8) !SuggestionReturn {
             // Enter or ctrl-y -> Accept.
             '\r', '\n', 25 => return .{ .selected_index = selected },
             // Esc or ctrl-c -> Cancel.
-            27, 3 => return .quit,
+            27, 3 => return .terminate_program,
             // Down-arrow or ctrl-n => Select next suggestion.
             14 => {
                 selected = (selected + 1) % suggestions.len;
