@@ -220,17 +220,71 @@ pub fn clear(self: *const Self, content: [][]const u8) !void {
     try self.terminal.showCursor();
 }
 
-pub const SuggestionReturn = union(enum) {
-    selected_index: usize,
+/// All keybindings are stored with ascii-codes, to be able to compare with
+/// bytes from Menu.zig.
+///
+/// FIXME: Space should disable/terminate the program when run in interactive.
+pub const Keybindings = struct {
+    left_delete_one_char: u8 = 0x08, // Backspace or Ctrl-h.
+    right_delete_one_char: u8 = 0x04, // Ctrl-d.
+    move_to_start: u8 = 0x01, // Ctrl-a
+    move_to_end: u8 = 0x05, // Ctrl-e
+    move_left_one_char: u8 = 0x02,
+    move_right_one_char: u8 = 0x06,
+    quit: u8 = 0x03, // Ctrl-c.
+    accept_suggestion: u8 = 0x19, // Ctrl-y.
+    next_suggestion: u8 = 0x0E, // Ctrl-n.
+    prev_suggestion: u8 = 0x10, // Ctrl-p.
+
+    /// Be careful as the fields of the tagged values are initialized as
+    /// undefined.
+    fn toRequest(self: Keybindings, byte: u8) ?UserRequest {
+        // Since Zig can only switch on compile-known objects, then we have to
+        // have some sort of "large if-chain" for the mapping from a keybind to
+        // a UserRequest.
+        if (self.left_delete_one_char == byte) return .left_delete_one_char;
+        if (self.right_delete_one_char == byte) return .right_delete_one_char;
+        if (self.move_to_start == byte) return .move_to_start;
+        if (self.move_to_end == byte) return .move_to_end;
+        if (self.move_left_one_char == byte) return .move_left_one_char;
+        if (self.move_right_one_char == byte) return .move_right_one_char;
+        if (self.quit == byte) return .quit;
+        if (self.accept_suggestion == byte) return .{ .accept_suggestion = undefined };
+        if (self.next_suggestion == byte) return .{ .internal = .next_suggestion };
+        if (self.prev_suggestion == byte) return .{ .internal = .prev_suggestion };
+        return null;
+    }
+};
+
+const Internal = union(enum) {
+    next_suggestion,
+    prev_suggestion,
+};
+
+/// FIXME: Have some sort of system in place which can syncronize/check/map
+/// basically every request to a keybind.
+pub const UserRequest = union(enum) {
+    // These requests each map to a keybind.
+    left_delete_one_char,
+    right_delete_one_char,
+    move_to_start,
+    move_to_end,
+    move_left_one_char,
+    move_right_one_char,
+    quit,
+    /// The index of the accepted suggestion.
+    accept_suggestion: usize,
+    internal: Internal,
+
+    // These do not map to a keybind.
     pass_through_byte: u8,
-    terminate_program,
 };
 
 /// Displays the menu and lets the user navigate.
-/// Returns the selected index (0-based), `passed_through_byte` if the user
+/// Returns the selected index (0-based), `pass_through_byte` if the user
 /// keeps writing or quit if the user wants to `quit` viewing suggestions.
-pub fn handleInput(self: *Self, suggestions: [][]const u8) !SuggestionReturn {
-    if (suggestions.len == 0) return .terminate_program;
+pub fn getFinalUserRequest(self: *Self, kb: Keybindings, suggestions: [][]const u8) !UserRequest {
+    if (suggestions.len == 0) return .quit;
 
     var selected: usize = 0;
 
@@ -245,22 +299,25 @@ pub fn handleInput(self: *Self, suggestions: [][]const u8) !SuggestionReturn {
 
         const b = buf[0];
 
-        switch (b) {
-            // Enter or ctrl-y -> Accept.
-            '\r', '\n', 25 => return .{ .selected_index = selected },
-            // Esc or ctrl-c -> Cancel.
-            27, 3 => return .terminate_program,
-            // Down-arrow or ctrl-n => Select next suggestion.
-            14 => {
-                selected = (selected + 1) % suggestions.len;
+        const request = kb.toRequest(b);
+
+        if (request) |req| switch (req) {
+            .internal => |i| switch (i) {
+                .next_suggestion => {
+                    selected = (selected + 1) % suggestions.len;
+                    continue;
+                },
+                .prev_suggestion => {
+                    selected = if (selected == 0) suggestions.len - 1 else (selected - 1) % suggestions.len;
+                    continue;
+                },
             },
-            // Up-arrow or ctrl-p => Select previous suggestion.
-            16 => {
-                selected = if (selected == 0) suggestions.len - 1 else (selected - 1) % suggestions.len;
-            },
-            else => {
-                return .{ .pass_through_byte = b };
-            },
-        }
+            .accept_suggestion => |_| return .{ .accept_suggestion = selected },
+            else => |r| return r,
+        };
+
+        // The byte did not correspond to a keybind, therefore we can safely
+        // pass this byte through.
+        return .{ .pass_through_byte = b };
     }
 }

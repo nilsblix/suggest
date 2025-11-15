@@ -58,6 +58,9 @@ pub const Config = struct {
     /// score is currently calculated. This could be a good reason to think of
     /// another metric to calculate the score.
     markov_bigram_weight: f64 = 120.0,
+    /// FIXME: Some way to determine these. Probably connected to the config
+    /// file sourcing.
+    keybindings: Menu.Keybindings = .{},
 
     /// Args is initialized via clap.
     pub fn init(args: anytype) !Config {
@@ -101,7 +104,145 @@ pub const Config = struct {
         return config;
     }
 
-    pub fn run(self: Config, alloc: Allocator) !void {
+    const NextFrame = enum {
+        quit,
+        @"continue",
+    };
+
+    fn nextFrameFromMode(self: *Config) NextFrame {
+        return switch (self.program.mode) {
+            .single, .@"one-shot" => .quit,
+            .interactive => .@"continue",
+        };
+    }
+
+    fn processAccepted(self: *Config, alloc: Allocator, out: *std.io.Writer, item: []const u8) !NextFrame {
+        // We need to replace the current word with item. Ex:
+        // `git br# -> git branch`
+        // where # represents the cursor.
+        const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
+        const right = self.command[self.cursor_idx..];
+        const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
+
+        try out.writeAll(slice);
+        try out.flush();
+        return .quit;
+    }
+
+    fn processPassThroughByte(self: *Config, alloc: Allocator, out: *std.io.Writer, byte: u8) !NextFrame {
+        // This programs returns the entire new line via stdout, which
+        // means we simply need to append this byte at cursor_idx in
+        // the line.
+        const left = self.command[0..self.cursor_idx];
+        const right = self.command[self.cursor_idx..];
+        const slice = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ left, byte, right });
+
+        // The slice should only have appended a single character.
+        std.debug.assert(self.command.len + 1 == slice.len);
+        // Update the command and cursor_index, in case we want to continue.
+        self.command = slice;
+        self.cursor_idx += 1;
+
+        switch (self.program.mode) {
+            .single => {
+                try out.writeAll(slice);
+                try out.flush();
+                return .quit;
+            },
+            .interactive => return .@"continue",
+            .@"one-shot" => unreachable,
+        }
+    }
+
+    fn processUserRequest(self: *Config, alloc: Allocator, out: *std.io.Writer, menu: *Menu, suggestions: [][]const u8) !NextFrame {
+        if (suggestions.len == 0) return switch (self.program.mode) {
+            .interactive => .@"continue",
+            .single, .@"one-shot" => .quit,
+        };
+
+        // Clear the menu before we proceed.
+        try menu.clear(suggestions);
+
+        if (self.program.mode == .@"one-shot") {
+            // Choose the most-appropriate suggestion. We are allowed to get
+            // the first element, as the case with no elements is handled up
+            // top.
+            const item = suggestions[0];
+
+            const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
+            const right = self.command[self.cursor_idx..];
+            const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
+
+            try out.writeAll(slice);
+            try out.flush();
+
+            return .quit;
+        }
+
+        const req = try menu.getFinalUserRequest(self.keybindings, suggestions);
+
+        const ret = switch (req) {
+            .quit => .quit,
+            .accept_suggestion => |idx| {
+                const item = suggestions[idx];
+                return try self.processAccepted(alloc, out, item);
+            },
+            .pass_through_byte => |byte| {
+                return try self.processPassThroughByte(alloc, out, byte);
+            },
+            .left_delete_one_char => {
+                if (self.command.len == 0 or self.cursor_idx == 0) {
+                    return self.nextFrameFromMode();
+                }
+
+                const delete_idx = @min(self.command.len - 1, self.cursor_idx - 1);
+
+                const left = self.command[0..delete_idx];
+                const right = self.command[delete_idx + 1 ..];
+                const new = try std.fmt.allocPrint(alloc, "{s}{s}", .{ left, right });
+                self.command = new;
+                self.cursor_idx -= 1;
+
+                return self.nextFrameFromMode();
+            },
+            .right_delete_one_char => {
+                if (self.command.len == 0) {
+                    return self.nextFrameFromMode();
+                }
+
+                const delete_idx = @min(self.command.len - 1, self.cursor_idx);
+
+                const left = self.command[0..delete_idx];
+                const right = self.command[delete_idx + 1 ..];
+                const new = try std.fmt.allocPrint(alloc, "{s}{s}", .{ left, right });
+                self.command = new;
+
+                return self.nextFrameFromMode();
+            },
+            .move_to_start => {
+                self.cursor_idx = 0;
+                return self.nextFrameFromMode();
+            },
+            .move_to_end => {
+                self.cursor_idx = self.command.len;
+                return self.nextFrameFromMode();
+            },
+            .move_left_one_char => {
+                if (self.cursor_idx == 0) return self.nextFrameFromMode();
+                self.cursor_idx -= 1;
+                return self.nextFrameFromMode();
+            },
+            .move_right_one_char => {
+                self.cursor_idx = @min(self.command.len, self.cursor_idx + 1);
+                return self.nextFrameFromMode();
+            },
+            else => unreachable,
+        };
+
+        return ret;
+    }
+
+    pub fn run(self: *Config, alloc: Allocator) !void {
         var data = try parsing.Data.init(alloc, self.file.path);
         defer data.deinit(alloc);
 
@@ -119,63 +260,49 @@ pub const Config = struct {
         });
         defer menu.deinit(alloc);
 
-        const current_command_slice = self.command[0..];
-        var current_command = try parsing.Command.fromSlice(alloc, current_command_slice);
-        defer current_command.deinit(alloc);
-
-        const pair = pair: {
-            const cursor_idx = if (self.cursor_idx < 1) 0 else self.cursor_idx;
-            break :pair parsing.getRelevantBigram(current_command_slice, cursor_idx);
-        };
-
         var suggestions = try alloc.alloc([]const u8, self.max_menu_height);
         defer alloc.free(suggestions);
-
         const mbw = self.markov_bigram_weight;
-        const count = try general.suggest(alloc, suggestions[0..], pair.fst, pair.snd, mbw);
-        if (count == 0) return;
 
-        // Only display the returned suggestions. We previously supplied
-        // `suggestions[0..]`, which lead to segfault as the display tried to
-        // iterate through unintialized memory.
-        const ret = try menu.handleInput(suggestions[0..count]);
-        // Clear the menu before we proceed.
-        try menu.clear(suggestions[0..count]);
-        switch (ret) {
-            .terminate_program => return,
-            .selected_index => |idx| {
-                const item = suggestions[idx];
+        var count: usize = 0;
 
-                // We need to replace the current word with item. Ex:
-                // `git br# -> git branch`
-                // where # represents the cursor.
-                const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
-                const right = self.command[self.cursor_idx..];
-                const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
+        var out_buf: [1024]u8 = undefined;
+        var out_file_writer = std.fs.File.stdout().writer(&out_buf);
+        const out: *std.io.Writer = &out_file_writer.interface;
 
-                var out_buf: [1024]u8 = undefined;
-                var out_file_writer = std.fs.File.stdout().writer(&out_buf);
-                const out: *std.io.Writer = &out_file_writer.interface;
+        loop: while (true) {
+            const prev_cursor_idx = self.cursor_idx;
 
-                try out.writeAll(slice);
-                try out.flush();
-            },
-            .pass_through_byte => |b| {
-                // This programs returns the entire new line via stdout, which
-                // means we simply need to append this byte at cursor_idx in
-                // the line.
-                const left = self.command[0..self.cursor_idx];
-                const right = self.command[self.cursor_idx..];
-                const slice = try std.fmt.allocPrint(alloc, "{s}{c}{s}", .{ left, b, right });
+            const current_command_slice = self.command[0..];
+            var current_command = try parsing.Command.fromSlice(alloc, current_command_slice);
+            defer current_command.deinit(alloc);
 
-                var out_buf: [16]u8 = undefined;
-                var out_file_writer = std.fs.File.stdout().writer(&out_buf);
-                const out: *std.io.Writer = &out_file_writer.interface;
+            const pair = pair: {
+                const cursor_idx = if (self.cursor_idx < 1) 0 else self.cursor_idx - 1;
+                break :pair parsing.getRelevantBigram(current_command_slice, cursor_idx);
+            };
 
-                try out.writeAll(slice);
-                try out.flush();
-            },
+            count = try general.suggest(alloc, suggestions[0..], pair.fst, pair.snd, mbw);
+            if (count == 0) break: loop;
+
+            // Only display the returned suggestions. We previously supplied
+            // `suggestions[0..]`, which lead to segfault as the display tried to
+            // iterate through unintialized memory.
+            const slice = suggestions[0..count];
+            const p = try self.processUserRequest(alloc, out, @constCast(&menu), slice);
+
+            // We need to rerender the prompt with the current state.
+            try menu.terminal.clearAndRenderLine(self.command, prev_cursor_idx, self.cursor_idx);
+            try menu.clear(slice);
+
+            switch (p) {
+                .quit => break :loop,
+                .@"continue" => {
+                    continue :loop;
+                }
+            }
         }
-        try menu.clear(suggestions[0..count]);
+
+        try menu.terminal.clearCommand(self.cursor_idx, null);
     }
 };

@@ -41,7 +41,7 @@ pub fn main() !void {
         return;
     }
 
-    const config = try Config.init(res.args);
+    var config = try Config.init(res.args);
     try config.run(alloc);
 }
 

@@ -105,8 +105,61 @@ pub fn clearLine(self: *Self) !void {
     try self.tty_writer.interface.writeAll("\x1b[K");
 }
 
-/// Renders a rectangle to tty_writer.interface. If border is not null, then it will print
-/// out a rectangle with that border. Width and height then becomes
+/// FIXME: This currently only works when the command is a single row. Make it
+/// work with multiple rows.
+fn getCommandStart(self: *Self, cursor_idx: usize) !Cursor {
+    if (cursor_idx == 0) {
+        return try self.getCursor();
+    }
+
+    try self.saveCursor();
+
+    const len = cursor_idx;
+    try self.tty_writer.interface.print("\x1b[{d}D", .{len});
+    const ret = try self.getCursor();
+
+    try self.restoreCursor();
+    return ret;
+}
+
+/// Same limitations as `getCommandStart`, which is that commands that span
+/// several rows are not supported.
+pub fn clearCommand(self: *Self, cursor_idx: usize, cmd_start: ?Cursor) !void {
+    const start = if (cmd_start) |p| p else try self.getCommandStart(cursor_idx);
+
+    try self.goto(start.row, start.col);
+    // Clear from there to end of screen.
+    try self.tty_writer.interface.writeAll("\x1b[J");
+    try self.tty_writer.interface.flush();
+}
+
+/// Clear everything after the current prompt, and render `command`. Calculates
+/// the new rows, and cols based on `cursor_idx` and puts the cursor there
+/// after rendering.
+pub fn clearAndRenderLine(
+    self: *Self,
+    command: []const u8,
+    prev_cursor_idx: usize,
+    new_cursor_idx: usize,
+) !void {
+    // Move to the logical start of the command line based on where the cursor
+    // was before this update (`prev_cursor_idx` characters into the command).
+    const cmd_start = try self.getCommandStart(prev_cursor_idx);
+
+    // Clear the previously rendered command (and anything after it).
+    try self.clearCommand(prev_cursor_idx, cmd_start);
+
+    // Render the updated command starting from the command start.
+    try self.tty_writer.interface.writeAll(command);
+    try self.tty_writer.interface.flush();
+
+    // Finally, position the cursor at the new logical cursor index within the
+    // command. Multi-row commands are not yet supported.
+    try self.goto(cmd_start.row, cmd_start.col + new_cursor_idx);
+}
+
+/// Renders a rectangle to tty_writer.interface. If border is not null, then it
+/// will print out a rectangle with that border. Width and height then becomes
 /// inner-width, and inner-height.
 pub fn drawRectFlushless(
     self: *Self,

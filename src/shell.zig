@@ -30,6 +30,7 @@ pub const ZSH_INIT_SCRIPT =
     \\     ~/Code/suggest/zig-out/bin/suggest \
     \\       --file ~/.zsh_history \
     \\       --command="$line" \
+    \\       --mode=interactive \
     \\       --cursor-idx="$cursor_index" \
     \\       --max-height=15 \
     \\       --max-width=40 \
@@ -63,6 +64,7 @@ pub const BASH_INIT_SCRIPT =
     \\     ~/Code/suggest/zig-out/bin/suggest \
     \\       --file "$HOME/.bash_history" \
     \\       --command="$line" \
+    \\       --mode=interactive \
     \\       --cursor-idx="$cursor_index" \
     \\       --max-height=15 \
     \\       --max-width=40 \

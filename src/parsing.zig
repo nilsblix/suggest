@@ -147,17 +147,20 @@ pub const Pair = struct {
 };
 
 /// Returns the command from start to end, except the token left of the cursor.
+/// `idx` is treated as an exclusive cursor index (i.e. it points between
+/// characters, not at a character).
 pub fn popLeftTokenOfIdx(command: []const u8, idx: usize) []const u8 {
-    if (command.len == 0) return "";
+    if (command.len == 0 or idx == 0) return "";
 
-    var i = @min(command.len - 1, idx);
+    const last_index = command.len - 1;
+    var i: usize = @min(last_index, idx - 1);
     while (true) {
-        if (i == 0) {
-            return "";
-        }
-
         if (isTokenSeparator(command[i])) {
             return command[0 .. i + 1];
+        }
+
+        if (i == 0) {
+            return "";
         }
 
         i -= 1;
@@ -244,6 +247,78 @@ pub fn getRelevantBigram(unparsed: []const u8, cursor_idx: usize) Pair {
         .fst = fst,
         .snd = snd,
     };
+}
+
+test "popLeftTokenOfIdx" {
+    {
+        const s = "";
+        const idx: usize = 0;
+        const ret = popLeftTokenOfIdx(s, idx);
+        const exp = "";
+        const ok = std.mem.eql(u8, exp, ret);
+        if (!ok) {
+            std.log.warn("popLeftTokenOfIdx empty command failed", .{});
+            std.debug.print("Expected: '{s}'\n", .{exp});
+            std.debug.print("Got     : '{s}'\n", .{ret});
+        }
+        try std.testing.expect(ok);
+    }
+
+    {
+        const s = "git br";
+        const idx: usize = 0;
+        const ret = popLeftTokenOfIdx(s, idx);
+        const exp = "";
+        const ok = std.mem.eql(u8, exp, ret);
+        if (!ok) {
+            std.log.warn("popLeftTokenOfIdx cursor at start failed", .{});
+            std.debug.print("Expected: '{s}'\n", .{exp});
+            std.debug.print("Got     : '{s}'\n", .{ret});
+        }
+        try std.testing.expect(ok);
+    }
+
+    {
+        const s = "git br";
+        const idx: usize = s.len; // cursor after "br"
+        const ret = popLeftTokenOfIdx(s, idx);
+        const exp = "git ";
+        const ok = std.mem.eql(u8, exp, ret);
+        if (!ok) {
+            std.log.warn("popLeftTokenOfIdx simple token failed", .{});
+            std.debug.print("Expected: '{s}'\n", .{exp});
+            std.debug.print("Got     : '{s}'\n", .{ret});
+        }
+        try std.testing.expect(ok);
+    }
+
+    {
+        const s = "hello";
+        const idx: usize = s.len;
+        const ret = popLeftTokenOfIdx(s, idx);
+        const exp = "";
+        const ok = std.mem.eql(u8, exp, ret);
+        if (!ok) {
+            std.log.warn("popLeftTokenOfIdx single token failed", .{});
+            std.debug.print("Expected: '{s}'\n", .{exp});
+            std.debug.print("Got     : '{s}'\n", .{ret});
+        }
+        try std.testing.expect(ok);
+    }
+
+    {
+        const s = "hello git bisect world";
+        const idx: usize = 12;
+        const ret = popLeftTokenOfIdx(s, idx);
+        const exp = "hello git ";
+        const ok = std.mem.eql(u8, exp, ret);
+        if (!ok) {
+            std.log.warn("popLeftTokenOfIdx mid-token cursor failed", .{});
+            std.debug.print("Expected: '{s}'\n", .{exp});
+            std.debug.print("Got     : '{s}'\n", .{ret});
+        }
+        try std.testing.expect(ok);
+    }
 }
 
 test "relevant bigram" {
