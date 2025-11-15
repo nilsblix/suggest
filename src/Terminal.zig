@@ -230,59 +230,116 @@ pub const Size = struct {
 };
 
 /// We ask the terminal for the cursor position via
-/// `ESC [ 6 n`,
-/// which the terminal will respond on tty_reader.interface with
-/// `ESC [ {row} ; {col} R`.
+/// `ESC [ 6 n`, which the terminal will respond to with
+/// `ESC [ {row} ; {col} R` on tty_reader.interface.
+///
+/// When the user is typing quickly, there can already be pending key bytes in
+/// the TTY buffer before the DSR response arrives. This implementation
+/// therefore streams bytes and searches for a full `ESC [ row ; col R`
+/// sequence, ignoring unrelated bytes.
 pub fn getCursor(self: *Self) !Cursor {
-    // 1. Ask the terminal for cursor position: ESC [ 6 n
+    // Ask the terminal for cursor position: ESC [ 6 n
     try self.tty_writer.interface.writeAll("\x1b[6n");
     try self.tty_writer.interface.flush();
 
-    var buf: [32]u8 = undefined;
-    var got: usize = 0;
+    const State = enum {
+        idle,
+        after_esc,
+        after_csi,
+        row,
+        after_semicolon,
+        col,
+    };
 
-    // 2. Read until we see "R" or run out of buffer.
-    while (got < buf.len) {
-        const n = try self.tty_reader.interface.readSliceShort(buf[got .. got + 1]);
-        if (n == 0) break; // EOF-ish
-        got += n;
-        if (buf[got - 1] == 'R') break;
-    }
-
-    // 3. Check that the format of the cursor position is correct.
-    if (got < 2 or buf[0] != 0x1b or buf[1] != '[') {
-        return error.BadResponse;
-    }
-
-    // 4. Extract the row information.
-    var i: usize = 2;
+    var state: State = .idle;
     var row: usize = 0;
-    while (i < got and buf[i] >= '0' and buf[i] <= '9') : (i += 1) {
-        row = row * 10 + @as(usize, buf[i] - '0');
-    }
-
-    // 5. Check that the next information is the column information.
-    if (i >= got or buf[i] != ';') {
-        return error.BadResponse;
-    }
-
-    // 6. Skip the ';' byte.
-    i += 1;
-
-    // 7. Extract the col information, similar to how we got row
-    // information.
     var col: usize = 0;
-    while (i < got and buf[i] >= '0' and buf[i] <= '9') : (i += 1) {
-        col = col * 10 + @as(usize, buf[i] - '0');
+    var have_row = false;
+    var have_col = false;
+
+    // Read one byte at a time and look for ESC [ row ; col R.
+    var scratch: [1]u8 = undefined;
+    var read_count: usize = 0;
+    // Arbitrary value for max amount of bytes. This is still plenty for e.g.
+    // ESC[9999;9999R plus noise.
+    const max_bytes: usize = 64;
+
+    while (read_count < max_bytes) {
+        const n = try self.tty_reader.interface.readSliceShort(&scratch);
+        if (n == 0) break; // EOF-ish
+        read_count += n;
+
+        const b = scratch[0];
+
+        switch (state) {
+            .idle => {
+                if (b == 0x1b) {
+                    state = .after_esc;
+                    row = 0;
+                    col = 0;
+                    have_row = false;
+                    have_col = false;
+                } else {
+                    // Ignore unrelated input (user typing, other control seqs).
+                }
+            },
+            .after_esc => {
+                if (b == '[') {
+                    state = .after_csi;
+                } else {
+                    // Not a CSI sequence, therefore reset and possibly treat this as a new ESC.
+                    state = .idle;
+                    if (b == 0x1b) {
+                        state = .after_esc;
+                    }
+                }
+            },
+            .after_csi => {
+                if (b >= '0' and b <= '9') {
+                    state = .row;
+                    have_row = true;
+                    row = @as(usize, b - '0');
+                } else {
+                    // Some other CSI sequence, therefore abort this attempt.
+                    state = .idle;
+                }
+            },
+            .row => {
+                if (b >= '0' and b <= '9') {
+                    row = row * 10 + @as(usize, b - '0');
+                } else if (b == ';' and have_row) {
+                    state = .after_semicolon;
+                } else {
+                    // Malformed row, therefore start over.
+                    state = .idle;
+                }
+            },
+            .after_semicolon => {
+                if (b >= '0' and b <= '9') {
+                    state = .col;
+                    have_col = true;
+                    col = @as(usize, b - '0');
+                } else {
+                    // Malformed, therefore reset.
+                    state = .idle;
+                }
+            },
+            .col => {
+                if (b >= '0' and b <= '9') {
+                    col = col * 10 + @as(usize, b - '0');
+                } else if (b == 'R' and have_col) {
+                    // Successfully parsed ESC [ row ; col R.
+                    return .{ .row = row, .col = col };
+                } else {
+                    // Not the expected terminator, therefore reset.
+                    state = .idle;
+                }
+            },
+        }
     }
 
-    // 8. The expected last byte is 'R', which we used as a sentinel
-    // earlier.
-    if (i >= got or buf[i] != 'R') {
-        return error.BadResponse;
-    }
-
-    return .{ .row = row, .col = col };
+    // We failed to observe a valid DSR reply within max_bytes.
+    return error.BadResponse;
 }
 
 /// Query terminal size (rows, cols) by moving to bottom-right and reading

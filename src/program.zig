@@ -58,9 +58,12 @@ pub const Config = struct {
     /// score is currently calculated. This could be a good reason to think of
     /// another metric to calculate the score.
     markov_bigram_weight: f64 = 120.0,
+    /// Some keybindings that probably exist on the heap somewhere. NOTE: This
+    /// could be a pointer to where that ArrayList is located. This note sortof
+    /// ties in with the FIXME below.
     /// FIXME: Some way to determine these. Probably connected to the config
     /// file sourcing.
-    keybindings: Menu.Keybindings = .{},
+    keybindings: []const Menu.InternalAction.Keybind = Menu.InternalAction.default_keybinds[0..],
 
     /// Args is initialized via clap.
     pub fn init(args: anytype) !Config {
@@ -154,42 +157,8 @@ pub const Config = struct {
         }
     }
 
-    fn processUserRequest(self: *Config, alloc: Allocator, out: *std.io.Writer, menu: *Menu, suggestions: [][]const u8) !NextFrame {
-        if (suggestions.len == 0) return switch (self.program.mode) {
-            .interactive => .@"continue",
-            .single, .@"one-shot" => .quit,
-        };
-
-        // Clear the menu before we proceed.
-        try menu.clear(suggestions);
-
-        if (self.program.mode == .@"one-shot") {
-            // Choose the most-appropriate suggestion. We are allowed to get
-            // the first element, as the case with no elements is handled up
-            // top.
-            const item = suggestions[0];
-
-            const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
-            const right = self.command[self.cursor_idx..];
-            const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
-
-            try out.writeAll(slice);
-            try out.flush();
-
-            return .quit;
-        }
-
-        const req = try menu.getFinalUserRequest(self.keybindings, suggestions);
-
-        const ret = switch (req) {
-            .quit => .quit,
-            .accept_suggestion => |idx| {
-                const item = suggestions[idx];
-                return try self.processAccepted(alloc, out, item);
-            },
-            .pass_through_byte => |byte| {
-                return try self.processPassThroughByte(alloc, out, byte);
-            },
+    fn processTextManipulation(self: *Config, alloc: Allocator, edit: Menu.TextManipulation) !NextFrame {
+        switch (edit) {
             .left_delete_one_char => {
                 if (self.command.len == 0 or self.cursor_idx == 0) {
                     return self.nextFrameFromMode();
@@ -236,7 +205,49 @@ pub const Config = struct {
                 self.cursor_idx = @min(self.command.len, self.cursor_idx + 1);
                 return self.nextFrameFromMode();
             },
-            else => unreachable,
+        }
+    }
+
+    fn processAction(self: *Config, alloc: Allocator, out: *std.io.Writer, menu: *Menu, suggestions: [][]const u8) !NextFrame {
+        if (suggestions.len == 0) return switch (self.program.mode) {
+            .interactive => .@"continue",
+            .single, .@"one-shot" => .quit,
+        };
+
+        // Clear the menu before we proceed.
+        // FIXME: Do we need this?
+        try menu.clear(suggestions);
+
+        if (self.program.mode == .@"one-shot") {
+            // Choose the most-appropriate suggestion. We are allowed to get
+            // the first element, as the case with no elements is handled up
+            // top.
+            const item = suggestions[0];
+
+            const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
+            const right = self.command[self.cursor_idx..];
+            const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
+
+            try out.writeAll(slice);
+            try out.flush();
+
+            return .quit;
+        }
+
+        const req = try menu.getAction(self.keybindings, suggestions);
+
+        const ret = switch (req) {
+            .quit => .quit,
+            .accept => |idx| {
+                const item = suggestions[idx];
+                return try self.processAccepted(alloc, out, item);
+            },
+            .pass_through_byte => |byte| {
+                return try self.processPassThroughByte(alloc, out, byte);
+            },
+            .edit => |ed| {
+                return try self.processTextManipulation(alloc, ed);
+            },
         };
 
         return ret;
@@ -289,7 +300,7 @@ pub const Config = struct {
             // `suggestions[0..]`, which lead to segfault as the display tried to
             // iterate through unintialized memory.
             const slice = suggestions[0..count];
-            const p = try self.processUserRequest(alloc, out, @constCast(&menu), slice);
+            const p = try self.processAction(alloc, out, @constCast(&menu), slice);
 
             // We need to rerender the prompt with the current state.
             try menu.terminal.clearAndRenderLine(self.command, prev_cursor_idx, self.cursor_idx);
