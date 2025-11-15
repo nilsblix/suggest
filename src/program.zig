@@ -283,7 +283,7 @@ pub const Config = struct {
             };
 
             count = try general.suggest(alloc, suggestions[0..], pair.fst, pair.snd, mbw);
-            if (count == 0) break: loop;
+            if (count == 0) break :loop;
 
             // Only display the returned suggestions. We previously supplied
             // `suggestions[0..]`, which lead to segfault as the display tried to
@@ -299,7 +299,7 @@ pub const Config = struct {
                 .quit => break :loop,
                 .@"continue" => {
                     continue :loop;
-                }
+                },
             }
         }
 
