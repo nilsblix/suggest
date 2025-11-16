@@ -264,7 +264,7 @@ pub const InternalAction = union(enum) {
         .{ .key = 0x02, .act = .{ .action = .{ .edit = .move_left_one_char } } },
         .{ .key = 0x06, .act = .{ .action = .{ .edit = .move_right_one_char } } },
         .{ .key = 0x03, .act = .{ .action = .quit } },
-        .{ .key = 0x19, .act = .{ .action = .{ .accept = 0 } } },
+        .{ .key = 0x19, .act = .{ .action = .{ .accept = undefined } } },
         .{ .key = 0x0E, .act = .next_suggestion },
         .{ .key = 0x10, .act = .prev_suggestion },
     };
@@ -326,8 +326,8 @@ pub fn getAction(self: *Self, keybinds: []const InternalAction.Keybind, suggesti
                 .edit => |ea| {
                     return .{ .edit = ea };
                 },
-                .pass_through_byte => |_| { },
-            }
+                .pass_through_byte => |_| {},
+            },
         };
 
         // The byte did not correspond to a keybind, therefore we can safely

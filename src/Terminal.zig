@@ -107,7 +107,7 @@ pub fn clearLine(self: *Self) !void {
 
 /// FIXME: This currently only works when the command is a single row. Make it
 /// work with multiple rows.
-fn getCommandStart(self: *Self, cursor_idx: usize) !Cursor {
+pub fn getCommandStart(self: *Self, cursor_idx: usize) !Cursor {
     if (cursor_idx == 0) {
         return try self.getCursor();
     }
@@ -127,10 +127,14 @@ fn getCommandStart(self: *Self, cursor_idx: usize) !Cursor {
 pub fn clearCommand(self: *Self, cursor_idx: usize, cmd_start: ?Cursor) !void {
     const start = if (cmd_start) |p| p else try self.getCommandStart(cursor_idx);
 
+    try self.saveCursor();
+
     try self.goto(start.row, start.col);
     // Clear from there to end of screen.
     try self.tty_writer.interface.writeAll("\x1b[J");
     try self.tty_writer.interface.flush();
+
+    try self.restoreCursor();
 }
 
 /// Clear everything after the current prompt, and render `command`. Calculates
@@ -149,6 +153,7 @@ pub fn clearAndRenderLine(
     // Clear the previously rendered command (and anything after it).
     try self.clearCommand(prev_cursor_idx, cmd_start);
 
+    try self.goto(cmd_start.row, cmd_start.col);
     // Render the updated command starting from the command start.
     try self.tty_writer.interface.writeAll(command);
     try self.tty_writer.interface.flush();

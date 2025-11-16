@@ -119,20 +119,28 @@ pub const Config = struct {
         };
     }
 
-    fn processAccepted(self: *Config, alloc: Allocator, out: *std.io.Writer, item: []const u8) !NextFrame {
+    fn accept(self: *Config, alloc: Allocator, out: *std.io.Writer, menu: *const Menu, item: []const u8) !NextFrame {
         // We need to replace the current word with item. Ex:
         // `git br# -> git branch`
         // where # represents the cursor.
         const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
         const right = self.command[self.cursor_idx..];
-        const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
+
+        const new_left = try std.fmt.allocPrint(alloc, "{s}{s}", .{ left, item });
+        const start = try menu.terminal.getCommandStart(self.cursor_idx);
+
+        const slice = try std.fmt.allocPrint(alloc, "{s}{s}", .{ new_left, right });
 
         try out.writeAll(slice);
         try out.flush();
+
+        // FIXME: Yet here we assume that the new command is only on a single
+        // row.
+        try menu.terminal.goto(start.row, start.col + new_left.len);
         return .quit;
     }
 
-    fn processPassThroughByte(self: *Config, alloc: Allocator, out: *std.io.Writer, byte: u8) !NextFrame {
+    fn passThroughByte(self: *Config, alloc: Allocator, out: *std.io.Writer, byte: u8) !NextFrame {
         // This programs returns the entire new line via stdout, which
         // means we simply need to append this byte at cursor_idx in
         // the line.
@@ -157,7 +165,7 @@ pub const Config = struct {
         }
     }
 
-    fn processTextManipulation(self: *Config, alloc: Allocator, edit: Menu.TextManipulation) !NextFrame {
+    fn manipulateText(self: *Config, alloc: Allocator, edit: Menu.TextManipulation) !NextFrame {
         switch (edit) {
             .left_delete_one_char => {
                 if (self.command.len == 0 or self.cursor_idx == 0) {
@@ -240,13 +248,13 @@ pub const Config = struct {
             .quit => .quit,
             .accept => |idx| {
                 const item = suggestions[idx];
-                return try self.processAccepted(alloc, out, item);
+                return try self.accept(alloc, out, @constCast(menu), item);
             },
             .pass_through_byte => |byte| {
-                return try self.processPassThroughByte(alloc, out, byte);
+                return try self.passThroughByte(alloc, out, byte);
             },
             .edit => |ed| {
-                return try self.processTextManipulation(alloc, ed);
+                return try self.manipulateText(alloc, ed);
             },
         };
 
