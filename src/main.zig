@@ -7,7 +7,15 @@ const program = @import("program.zig");
 const Config = program.Config;
 
 pub fn main() !void {
-    const alloc = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        if (deinit_status == .leak) {
+            std.log.err("memory leak", .{});
+        }
+    }
+    const alloc = gpa.allocator();
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help                    Display this help and exit.
