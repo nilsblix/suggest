@@ -34,7 +34,7 @@ pub const ZSH_INIT_SCRIPT =
     \\       --cursor-idx="$cursor_index" \
     \\       --max-height=15 \
     \\       --max-width=40 \
-    \\       --bigram-weight=400
+    \\       --bigram-weight=900
     \\   ) || return
     \\
     \\   # If nothing returned, do nothing

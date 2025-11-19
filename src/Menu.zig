@@ -115,10 +115,10 @@ fn appendNewlines(self: *const Self, need: usize, cursor: *Terminal.Cursor, term
     try self.terminal.goto(cursor.row, cursor.col);
 }
 
-fn getContentWidth(self: *const Self, content: [][]const u8) usize {
+fn getContentWidth(self: *const Self, content: [][]const u8, term_width: usize) usize {
     var width: usize = 0;
     for (content) |line| {
-        const candidate = @min(line.len, self.config.max_width);
+        const candidate = @min(term_width, @min(line.len, self.config.max_width));
         if (candidate > width) width = candidate;
     }
     return width;
@@ -138,29 +138,37 @@ fn getOuterDims(self: *const Self, inner_width: usize, inner_height: usize) stru
     return .{ outer_width, outer_height };
 }
 
+fn getTopLeft(cursor: Terminal.Cursor, term_width: usize, inner_width: usize) Terminal.Cursor {
+    return .{
+        .row = cursor.row,
+        .col = @min(cursor.col, term_width - inner_width - 1),
+    };
+}
+
 pub fn render(self: *const Self, content: [][]const u8, selected: usize) !void {
     if (content.len == 0) {
         return;
     }
 
     try self.terminal.hideCursor();
+    const term_size = try self.terminal.getSize();
 
-    const inner_width = @max(self.getContentWidth(content), 1);
+    const inner_width = @max(self.getContentWidth(content, term_size.cols), 1);
     const inner_height = content.len;
 
-    var cursor = try self.terminal.getCursor();
-    const term_size = try self.terminal.getSize();
+    const cursor = try self.terminal.getCursor();
+    var start_pos = getTopLeft(cursor, term_size.cols, inner_width);
 
     const outer = self.getOuterDims(inner_width, inner_height);
     const want_below = outer.@"1";
     const use_border = self.config.border != .none;
 
-    const need = requestedNewlines(cursor, want_below, term_size);
-    try self.appendNewlines(need, &cursor, term_size);
+    const need = requestedNewlines(start_pos, want_below, term_size);
+    try self.appendNewlines(need, &start_pos, term_size);
 
     try self.terminal.drawRectFlushless(
-        cursor.row + 1,
-        cursor.col,
+        start_pos.row + 1,
+        start_pos.col,
         inner_width,
         inner_height,
         self.config.normal,
@@ -168,8 +176,8 @@ pub fn render(self: *const Self, content: [][]const u8, selected: usize) !void {
     );
 
     const text_pos = Terminal.Cursor{
-        .row = if (use_border) cursor.row + 2 else cursor.row + 1,
-        .col = if (use_border) cursor.col + 1 else cursor.col,
+        .row = if (use_border) start_pos.row + 2 else start_pos.row + 1,
+        .col = if (use_border) start_pos.col + 1 else start_pos.col,
     };
 
     for (content, 0..) |suggestion, idx| {
@@ -204,15 +212,17 @@ pub fn clear(self: *const Self, content: [][]const u8) !void {
     try self.terminal.hideCursor();
     try self.terminal.saveCursor();
 
-    const inner_width = @max(self.getContentWidth(content), 1);
+    const term_size = try self.terminal.getSize();
+    const inner_width = @max(self.getContentWidth(content, term_size.cols), 1);
     const inner_height = content.len;
 
     const cursor = try self.terminal.getCursor();
+    const start_pos = getTopLeft(cursor, term_size.cols, inner_width);
 
     const outer = self.getOuterDims(inner_width, inner_height);
 
-    for (cursor.row + 1..cursor.row + 2 + outer.@"0") |row| {
-        try self.terminal.goto(row, cursor.col);
+    for (start_pos.row + 1..start_pos.row + 2 + outer.@"0") |row| {
+        try self.terminal.goto(row, start_pos.col);
         try self.terminal.clearLine();
     }
 

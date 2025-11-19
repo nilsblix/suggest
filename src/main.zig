@@ -10,7 +10,6 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const deinit_status = gpa.deinit();
-        //fail test; can't try in defer as defer is executed after we return
         if (deinit_status == .leak) {
             std.log.err("memory leak", .{});
         }
@@ -50,6 +49,7 @@ pub fn main() !void {
     }
 
     var config = try Config.init(res.args);
+    defer config.deinit(alloc);
     try config.run(alloc);
 }
 

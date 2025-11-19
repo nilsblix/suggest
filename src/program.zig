@@ -50,6 +50,7 @@ pub const Config = struct {
     program: Program,
     file: HistoryFile,
     command: []const u8 = "",
+    command_buffer: ?[]u8 = null,
     cursor_idx: usize = 0,
     max_menu_width: usize = 20,
     max_menu_height: usize = 8,
@@ -107,6 +108,13 @@ pub const Config = struct {
         return config;
     }
 
+    pub fn deinit(self: *Config, alloc: Allocator) void {
+        if (self.command_buffer) |buf| {
+            alloc.free(buf);
+            self.command_buffer = null;
+        }
+    }
+
     const NextFrame = enum {
         quit,
         @"continue",
@@ -127,9 +135,11 @@ pub const Config = struct {
         const right = self.command[self.cursor_idx..];
 
         const new_left = try std.fmt.allocPrint(alloc, "{s}{s}", .{ left, item });
+        defer alloc.free(new_left);
         const start = try menu.terminal.getCommandStart(self.cursor_idx);
 
         const slice = try std.fmt.allocPrint(alloc, "{s}{s}", .{ new_left, right });
+        defer alloc.free(slice);
 
         try out.writeAll(slice);
         try out.flush();
@@ -138,6 +148,14 @@ pub const Config = struct {
         // row.
         try menu.terminal.goto(start.row, start.col + new_left.len);
         return .quit;
+    }
+
+    fn setCommand(self: *Config, alloc: Allocator, new: []u8) void {
+        if (self.command_buffer) |buf| {
+            alloc.free(buf);
+        }
+        self.command_buffer = new;
+        self.command = new;
     }
 
     fn passThroughByte(self: *Config, alloc: Allocator, out: *std.io.Writer, byte: u8) !NextFrame {
@@ -151,7 +169,7 @@ pub const Config = struct {
         // The slice should only have appended a single character.
         std.debug.assert(self.command.len + 1 == slice.len);
         // Update the command and cursor_index, in case we want to continue.
-        self.command = slice;
+        self.setCommand(alloc, slice);
         self.cursor_idx += 1;
 
         switch (self.program.mode) {
@@ -177,7 +195,7 @@ pub const Config = struct {
                 const left = self.command[0..delete_idx];
                 const right = self.command[delete_idx + 1 ..];
                 const new = try std.fmt.allocPrint(alloc, "{s}{s}", .{ left, right });
-                self.command = new;
+                self.setCommand(alloc, new);
                 self.cursor_idx -= 1;
 
                 return self.nextFrameFromMode();
@@ -192,7 +210,7 @@ pub const Config = struct {
                 const left = self.command[0..delete_idx];
                 const right = self.command[delete_idx + 1 ..];
                 const new = try std.fmt.allocPrint(alloc, "{s}{s}", .{ left, right });
-                self.command = new;
+                self.setCommand(alloc, new);
 
                 return self.nextFrameFromMode();
             },
@@ -235,6 +253,7 @@ pub const Config = struct {
             const left = parsing.popLeftTokenOfIdx(self.command, self.cursor_idx);
             const right = self.command[self.cursor_idx..];
             const slice = try std.fmt.allocPrint(alloc, "{s}{s}{s}", .{ left, item, right });
+            defer alloc.free(slice);
 
             try out.writeAll(slice);
             try out.flush();
@@ -244,7 +263,7 @@ pub const Config = struct {
 
         const req = try menu.getAction(self.keybindings, suggestions);
 
-        const ret = switch (req) {
+        return switch (req) {
             .quit => .quit,
             .accept => |idx| {
                 const item = suggestions[idx];
@@ -257,8 +276,6 @@ pub const Config = struct {
                 return try self.manipulateText(alloc, ed);
             },
         };
-
-        return ret;
     }
 
     pub fn run(self: *Config, alloc: Allocator) !void {
@@ -302,7 +319,11 @@ pub const Config = struct {
             };
 
             count = try general.suggest(alloc, suggestions[0..], pair.fst, pair.snd, mbw);
-            if (count == 0) break :loop;
+            if (count == 0) {
+                try out.writeAll(self.command);
+                try out.flush();
+                break :loop;
+            }
 
             // Only display the returned suggestions. We previously supplied
             // `suggestions[0..]`, which lead to segfault as the display tried to
